@@ -145,6 +145,17 @@ Canais monetizados profissionais faturam 5x a 10x mais com vendas e afiliados do
     5. *Foco 5: Personalizado (Prompt Livre)* (Ex: "Focar apenas nos fuzis de assalto coreanos e no M4").
 - **Benefício Estratégico:** A partir de uma única matéria raspada, o produtor de conteúdo pode gerar **3 a 4 vídeos longos diferentes de 10 a 15 minutos**, cada um com roteiro cirúrgico e galeria de fotos dedicada.
 
+### Sessão 10: Teste de Avatar Real do Usuário (@stanleyalvesbr) em Vídeo de 1 Minuto
+- **Demanda do Usuário:** Utilizar as duas fotos reais enviadas pelo usuário como exemplos de avatar (Foto 1: estúdio gamer completo com múltiplos monitores; Foto 2: close-up estilo webcam streamer). Criar um vídeo teste de **1 minuto exato (60 segundos)** contendo um pedaço da matéria oficial e um pedaço da gameplay do canal do usuário.
+- **Implementação Realizada:**
+  1. *Armazenamento de Assets de Avatar:* Fotos salvas permanentemente em `storage/avatars/avatar_stanley_setup.jpg` e `storage/avatars/avatar_stanley_webcam.jpg`.
+  2. *Composição dos 60 Segundos no Remotion (`KenBurnsScene.tsx` & `newsDirectorService.ts`):*
+     - **Cena 1 (0 a 10s):** Avatar do Stanley em seu estúdio gamer completo em tela cheia com leve movimento Ken Burns e badge *"🔴 AO VIVO • @stanleyalvesbr"*, apresentando o lançamento de MW4.
+     - **Cena 2 (10 a 25s):** Gameplay de alta ação de FPS do canal `@stanleyalvesbr` com a webcam em close-up do Stanley no canto inferior direito com moldura neon verde esmeralda e barras de onda sonora animadas.
+     - **Cena 3 (25 a 45s):** Foto oficial em alta resolução da matéria da Activision com o fuzil **Han 86** em efeito Ken Burns e o avatar do Stanley na webcam detalhando o calibre 5.56 e o **Acessório Apex Han X20 Rasga-céu**.
+     - **Cena 4 (45 a 60s):** Retorno para o estúdio gamer do Stanley com encerramento e chamada para like e inscrição no canal.
+  3. *Validação no Player:* Compilado e reproduzido com sucesso no `@remotion/player`. Gravação do teste salva em `stanley_avatar_1min_1792533495470.webp`. Commit `6f0fd9a` sincronizado no GitHub.
+
 ---
 
 ## 5. Diretrizes de Execução e Próximos Passos Consolidados
