@@ -15,6 +15,7 @@ interface ProjectState {
   nextStep: () => void;
   prevStep: () => void;
   updateScene: (index: number, scene: Partial<SceneCut>) => void;
+  setScenes: (scenes: SceneCut[]) => void;
   loadDemoScenes: () => void;
 }
 
@@ -112,5 +113,12 @@ export const useProjectStore = create<ProjectState>((set) => ({
     scenes[index] = { ...scenes[index], ...updatedScene };
     return { project: { ...state.project, scenes } };
   }),
+  setScenes: (scenes) => set((state) => ({
+    project: {
+      ...state.project,
+      scenes,
+      targetDurationSeconds: scenes.reduce((acc, sc) => acc + sc.durationInSeconds, 0)
+    }
+  })),
   loadDemoScenes: () => set((state) => ({ project: { ...state.project, scenes: initialScenes } }))
 }));

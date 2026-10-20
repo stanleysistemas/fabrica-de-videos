@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from 'remotion';
 import { ProjectConfig, SceneCut } from '../types';
+import { KenBurnsScene } from './scenes/KenBurnsScene';
 
 interface VideoCompositionProps {
   project: ProjectConfig;
@@ -33,8 +34,21 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({ project }) =
 
         return (
           <Sequence key={scene.id || index} from={fromFrame} durationInFrames={sceneDurationFrames}>
-            <SceneRenderer scene={scene} brand={brand} fps={fps} aspectRatio={aspectRatio} />
-            <SubtitleOverlay scene={scene} audio={audio} fps={fps} aspectRatio={aspectRatio} />
+            {scene.type === 'ken_burns_news' || (scene as any).imageUrl ? (
+              <KenBurnsScene
+                heading={scene.title || 'NOTÍCIA OFICIAL'}
+                narration={(scene as any).narration || scene.text || scene.subtitle || ''}
+                imageUrl={(scene as any).imageUrl || (scene as any).associatedImageUrl}
+                kenBurnsEffect={(scene as any).kenBurnsEffect || 'zoom_in'}
+                layoutMode={(scene as any).layoutMode || 'webcam_streamer'}
+                siteName={brand.name || 'CALL OF DUTY OFICIAL'}
+              />
+            ) : (
+              <>
+                <SceneRenderer scene={scene} brand={brand} fps={fps} aspectRatio={aspectRatio} />
+                <SubtitleOverlay scene={scene} audio={audio} fps={fps} aspectRatio={aspectRatio} />
+              </>
+            )}
           </Sequence>
         );
       })}

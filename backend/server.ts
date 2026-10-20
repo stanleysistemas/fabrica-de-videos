@@ -8,6 +8,8 @@ import { qaInspectorService } from './services/qaInspectorService';
 
 import { hardwareService } from './services/hardwareService';
 import { voiceStudioService } from './services/voiceStudioService';
+import { newsScraperService } from './services/newsScraperService';
+import { newsDirectorService } from './services/newsDirectorService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,7 +24,7 @@ app.use('/storage', express.static(path.resolve(process.cwd(), 'storage')));
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'online',
-    version: '1.1.0',
+    version: '1.2.0',
     nodeVersion: process.version,
     platform: process.platform,
     engines: {
@@ -32,8 +34,50 @@ app.get('/api/health', (req: Request, res: Response) => {
       remotionRenderer: 'ready',
       voiceStudioLocal: 'ready',
       hardwareEngine: 'active',
+      newsScraper: 'ready',
+      newsDirector: 'ready',
     },
   });
+});
+
+// Endpoint: Scrape de Matéria de Blog / Notícia e Geração de Roteiro
+app.post('/api/news/scrape', async (req: Request, res: Response) => {
+  try {
+    const { url, styleMode } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'URL da matéria é obrigatória' });
+    }
+
+    const article = await newsScraperService.scrapeUrl(url);
+    const plan = newsDirectorService.generateVideoPlan({
+      article,
+      styleMode: styleMode || 'gamer_streamer',
+    });
+
+    res.json({ success: true, article, plan });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao processar matéria' });
+  }
+});
+
+// Endpoint: Recalcular Roteiro com Imagens Selecionadas pelo Usuário
+app.post('/api/news/recalculate-plan', async (req: Request, res: Response) => {
+  try {
+    const { article, styleMode, selectedImageIds } = req.body;
+    if (!article) {
+      return res.status(400).json({ error: 'Dados do artigo são obrigatórios' });
+    }
+
+    const plan = newsDirectorService.generateVideoPlan({
+      article,
+      styleMode: styleMode || 'gamer_streamer',
+      selectedImageIds,
+    });
+
+    res.json({ success: true, plan });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao recalcular roteiro' });
+  }
 });
 
 // Endpoint: Detecção e status de Hardware (GPU NVIDIA CUDA / CPU GGUF)

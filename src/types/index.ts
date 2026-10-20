@@ -11,7 +11,7 @@ export type VideoStyleClima =
 
 export interface SceneCut {
   id: string;
-  type: 'hero_title' | 'screenshot_synthetic' | 'terminal_scene' | 'stat_card' | 'text_card';
+  type: 'hero_title' | 'screenshot_synthetic' | 'terminal_scene' | 'stat_card' | 'text_card' | 'ken_burns_news';
   title?: string;
   subtitle?: string;
   text?: string;
@@ -23,6 +23,10 @@ export interface SceneCut {
   terminalOutput?: string;
   screenshotUrl?: string;
   bgGradient?: string;
+  imageUrl?: string;
+  associatedImageUrl?: string;
+  kenBurnsEffect?: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right';
+  layoutMode?: 'full_image' | 'webcam_streamer';
 }
 
 export interface BrandKit {
