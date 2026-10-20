@@ -7,6 +7,7 @@ interface ProjectState {
   setReferenceUrl: (url: string) => void;
   setAspectRatio: (ratio: AspectRatio) => void;
   setDuration: (duration: number) => void;
+  setDurationMode: (mode: 'source_exact' | 'custom_cut') => void;
   setStyleClima: (style: VideoStyleClima) => void;
   setBrandColors: (primary: string, secondary: string) => void;
   setSubtitleStyle: (style: SubtitleStyle) => void;
@@ -63,7 +64,9 @@ export const useProjectStore = create<ProjectState>((set) => ({
     topic: 'Como Criar Vídeos Virais com IA em 2026',
     referenceUrl: 'https://youtube.com/watch?v=exemplo',
     aspectRatio: '9:16',
-    targetDurationSeconds: 60,
+    targetDurationSeconds: 18,
+    sourceDurationSeconds: 18,
+    durationMode: 'source_exact',
     styleClima: 'tecnologico',
     brand: {
       name: 'Minha Marca',
@@ -89,6 +92,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setReferenceUrl: (referenceUrl) => set((state) => ({ project: { ...state.project, referenceUrl } })),
   setAspectRatio: (aspectRatio) => set((state) => ({ project: { ...state.project, aspectRatio } })),
   setDuration: (targetDurationSeconds) => set((state) => ({ project: { ...state.project, targetDurationSeconds } })),
+  setDurationMode: (durationMode) => set((state) => ({ project: { ...state.project, durationMode } })),
   setStyleClima: (styleClima) => set((state) => ({ project: { ...state.project, styleClima } })),
   setBrandColors: (primaryColor, secondaryColor) => set((state) => ({
     project: { ...state.project, brand: { ...state.project.brand, primaryColor, secondaryColor } }

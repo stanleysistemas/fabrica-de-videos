@@ -49,6 +49,8 @@ export interface ProjectConfig {
   referenceUrl?: string;
   aspectRatio: AspectRatio;
   targetDurationSeconds: number;
+  sourceDurationSeconds?: number;
+  durationMode: 'source_exact' | 'custom_cut';
   styleClima: VideoStyleClima;
   brand: BrandKit;
   audio: AudioSettings;

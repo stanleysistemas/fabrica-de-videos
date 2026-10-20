@@ -4,7 +4,7 @@ import { AspectRatio } from '../../types';
 import { Smartphone, Monitor, Square, Clock, ArrowRight, ArrowLeft, ShieldCheck } from 'lucide-react';
 
 export const Step2Format: React.FC = () => {
-  const { project, setAspectRatio, setDuration, nextStep, prevStep } = useProjectStore();
+  const { project, setAspectRatio, setDuration, setDurationMode, nextStep, prevStep } = useProjectStore();
 
   const formats: { id: AspectRatio; title: string; desc: string; icon: React.ReactNode; ideal: string }[] = [
     {
@@ -76,36 +76,89 @@ export const Step2Format: React.FC = () => {
         </div>
       </div>
 
-      {/* Seletor de Duração com Regra de Margem de Segurança */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3">
-          Duração Pretendida (Com Buffer de Segurança) *
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {durations.map((dur) => (
-            <button
-              key={dur.value}
-              onClick={() => setDuration(dur.value)}
-              className={`p-3.5 rounded-xl border text-center transition-all ${
-                project.targetDurationSeconds === dur.value
-                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
-                  : 'bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700'
-              }`}
-            >
-              <div className="font-bold text-sm">{dur.label}</div>
-              <div className={`text-[11px] mt-1 ${project.targetDurationSeconds === dur.value ? 'text-indigo-200' : 'text-slate-400'}`}>
-                {dur.buffer}
-              </div>
-            </button>
-          ))}
+      {/* Controle Inteligente de Duração Vinculada à Mídia de Origem */}
+      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-400" />
+            Governança de Duração da Mídia
+          </label>
+          <span className="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+            Arquivo de Origem: {project.sourceDurationSeconds || 18}s
+          </span>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setDurationMode('source_exact')}
+            className={`p-3.5 rounded-xl border text-left transition-all ${
+              project.durationMode === 'source_exact'
+                ? 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-500/10'
+                : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="font-bold text-xs text-white flex items-center justify-between mb-1">
+              <span>Preservar Mídia Original (100%)</span>
+              {project.durationMode === 'source_exact' && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              O tempo do vídeo final é exatamente o tempo do seu arquivo de origem ({project.sourceDurationSeconds || 18}s). Mudar para 9:16 ou 16:9 apenas ajusta o enquadramento.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDurationMode('custom_cut')}
+            className={`p-3.5 rounded-xl border text-left transition-all ${
+              project.durationMode === 'custom_cut'
+                ? 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-500/10'
+                : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="font-bold text-xs text-white flex items-center justify-between mb-1">
+              <span>Corte Viral / Resumo (Custom)</span>
+              {project.durationMode === 'custom_cut' && (
+                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Extrai um trecho específico ou limita o vídeo a uma minutagem pré-determinada (30s, 60s, 90s).
+            </p>
+          </button>
+        </div>
+
+        {project.durationMode === 'custom_cut' && (
+          <div className="pt-2">
+            <span className="text-[11px] font-semibold text-slate-400 block mb-2">
+              Escolha a minutagem do corte:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {durations.map((dur) => (
+                <button
+                  key={dur.value}
+                  onClick={() => setDuration(dur.value)}
+                  className={`p-2.5 rounded-lg border text-center transition-all ${
+                    project.targetDurationSeconds === dur.value
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="font-bold text-xs">{dur.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Alerta da Regra de Ouro da Duração */}
+      {/* Alerta de Enquadramento */}
       <div className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
         <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-slate-200">Regra de Ouro da Duração:</span> O roteiro gerado sempre terá cerca de 10% a 15% a mais de tempo planejado. Assim, após os cortes automáticos de silêncio do Whisper, o vídeo nunca ficará menor do que o tempo contratado.
+          <span className="font-semibold text-slate-200">Reenquadramento Inteligente:</span> Ao alternar entre <strong className="text-white">Vertical (9:16)</strong> e <strong className="text-white">Horizontal (16:9)</strong>, a duração não sofre corte artificial. O sistema apenas reposiciona os elementos, amplia safe zones e ajusta o fundo com blur ou zoom responsivo.
         </div>
       </div>
 
