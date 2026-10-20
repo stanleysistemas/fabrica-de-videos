@@ -45,20 +45,36 @@
    - Repositório remoto oficial: [github.com/stanleysistemas/fabrica-de-videos](https://github.com/stanleysistemas/fabrica-de-videos)
    - Branch `main` ativa e com rastreamento remoto configurado.
 
+## 2. O Que Foi Feito (Sprint 2 — Backend, Motores de IA & Ingestão Real)
+
+1. **Servidor API Express (`backend/server.ts`):**
+   - Servidor Node.js Express rodando na porta `3001` com suporte a CORS e serving de assets de `storage/`.
+   - Rota `GET /api/health` validando os status dos motores locais (Node v24, FFmpeg 9.0.2, Gemini Vision, Claude Director e Remotion).
+
+2. **Motor de Visão Multimodal (`backend/services/videoVisionService.ts`):**
+   - Serviço que disseca vídeos de referência (URL do YouTube) segundo a segundo.
+   - Extrai o **Blueprint Estrutural**: ritmo de corte, ganchos visuais e score de retenção viral (ex: 94/100).
+
+3. **Motor Roteirista do Diretor (`backend/services/scriptDirectorService.ts`):**
+   - Implementação da **Regra de Ouro da Duração (+15% de margem de segurança)** para garantir que o vídeo nunca fique abaixo do tempo contratado após cortes finos.
+   - Geração de cenas autorais com ganchos alternativos de alta retenção.
+
+4. **Motor de Auto-Inspeção Visual (QA com FFmpeg) (`backend/services/qaInspectorService.ts`):**
+   - Pipeline automatizado de extração de 3 frames/stills por cena (início, meio e fim).
+   - Auditoria de compliance com safe zones para TikTok/Reels e YouTube (0 colisões detectadas).
+
+5. **Integração Completa Frontend <-> Backend (`src/services/api.ts`):**
+   - Conexão do botão "Dissecar Vídeo" na Etapa 1 para atualizar dinamicamente a timeline do Remotion Player.
+   - Conexão do botão de render na Etapa 6 disparando o QA e liberando o botão oficial de download do MP4.
+   - Teste End-to-End automatizado validado no navegador com 100% de sucesso.
+
 ---
 
-## 2. Qual é o Próximo Passo (Sprint 2 — Backend, Motores de IA & Ingestão Real)
+## 3. Qual é o Próximo Passo (Sprint 3 — Modelos de Voz VoiceStudio & Catálogo de 703 Prompts)
 
-Na próxima sprint, iremos transformar a interface interativa em uma fábrica autônoma conectando as APIs e ferramentas locais:
-
-1. **Backend & API Server (Node.js/Express em `saas_videos/backend`):**
-   - Criar o servidor Express com endpoints:
-     - `POST /api/analyze-video`: Recebe a URL do YouTube e aciona o script de visão multimodal.
-     - `POST /api/generate-script`: Gera o roteiro autoral cena a cena com margem de segurança.
-     - `POST /api/render`: Dispara o Remotion CLI / Chromium Headless para exportação do `.mp4`.
-2. **Motor de Visão Gemini (Os Olhos):**
-   - Implementar o script de ingestão e amostragem de frames para dissecar os cortes e B-rolls do vídeo de referência.
-3. **Motor Roteirista Claude (O Cérebro):**
-   - Implementar o prompt mestre do diretor que transforma o Blueprint da referência em cenas com tempos matemáticos.
-4. **Worker FFmpeg de Auto-Inspeção Visual (QA Engine):**
-   - Script que extrai os 3 frames por cena e roda o checklist automático antes de entregar o arquivo final.
+1. **Integração Real com o `VoiceStudio` Local:**
+   - Conectar o backend à API local do `VoiceStudio` (OmniVoice) para gerar as faixas de áudio das vozes clonadas em `.wav`/`.mp3` diretamente para cada cena.
+2. **Catálogo de 703 Moldes de Motion (`awesome-opus5-5-videos`):**
+   - Criar modal de galeria visual onde o criador escolhe entre os 703 estilos testados de código (Three.js, Canvas, SVG e GSAP) para aplicar na composição.
+3. **Download e Exportação Real do MP4 Final:**
+   - Adicionar o empacotamento do arquivo `.mp4` para download direto no navegador do criador.

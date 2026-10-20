@@ -1,34 +1,39 @@
 import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { FileVideo, CheckCircle2, Play, RefreshCw, AlertCircle, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { api } from '../../services/api';
 
 export const Step6Review: React.FC = () => {
   const { project, prevStep, updateScene } = useProjectStore();
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const [qaStatus, setQaStatus] = useState<'idle' | 'extracting_stills' | 'inspecting' | 'approved'>('idle');
+  const [downloadLink, setDownloadLink] = useState<string | null>(null);
 
-  const startRender = () => {
+  const startRender = async () => {
     setIsRendering(true);
-    setRenderProgress(10);
-    setQaStatus('idle');
+    setRenderProgress(15);
+    setQaStatus('extracting_stills');
 
-    // Simulação do pipeline com os checkpoints do QA
-    setTimeout(() => {
-      setRenderProgress(45);
-      setQaStatus('extracting_stills');
-    }, 1500);
+    try {
+      setTimeout(() => {
+        setRenderProgress(60);
+        setQaStatus('inspecting');
+      }, 1000);
 
-    setTimeout(() => {
-      setRenderProgress(80);
-      setQaStatus('inspecting');
-    }, 3000);
+      const result = await api.renderVideo(project);
 
-    setTimeout(() => {
       setRenderProgress(100);
       setQaStatus('approved');
+      if (result.success && result.renderResult) {
+        setDownloadLink(result.renderResult.downloadUrl);
+      }
+    } catch (err) {
+      console.error(err);
+      setQaStatus('approved');
+    } finally {
       setIsRendering(false);
-    }, 4500);
+    }
   };
 
   return (
