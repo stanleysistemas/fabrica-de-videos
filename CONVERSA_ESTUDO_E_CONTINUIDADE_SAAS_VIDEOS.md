@@ -156,6 +156,19 @@ Canais monetizados profissionais faturam 5x a 10x mais com vendas e afiliados do
      - **Cena 4 (45 a 60s):** Retorno para o estúdio gamer do Stanley com encerramento e chamada para like e inscrição no canal.
   3. *Validação no Player:* Compilado e reproduzido com sucesso no `@remotion/player`. Gravação do teste salva em `stanley_avatar_1min_1792533495470.webp`. Commit `6f0fd9a` sincronizado no GitHub.
 
+### Sessão 11: Perícia do Vídeo `generated_video.mp4` e Requisitos para Animação com Voz
+- **Demanda do Usuário:** Analisar a imagem do estúdio em anexo e o arquivo de vídeo existente em `E:\CANAL GAMES\generated_video.mp4`. Diagnosticar exatamente o que é necessário para transformar a imagem estática naquele vídeo com movimentação facial, olhos, boca e voz, sem alterar código nem desenvolver nada, apenas anotando as necessidades técnicas em documento formal.
+- **Perícia Técnica do Vídeo de Referência:**
+  - *Resolução:* 736x400 pixels em proporção 16:9.
+  - *Duração:* 6.04 segundos (145 quadros a 24 fps).
+  - *Codecs:* H.264 High Profile + Áudio AAC Stereo 48kHz.
+  - *Origem:* Motor generativo de sincronia labial e pose facial (como Hedra Character-2 / Kling AI / LivePortrait) identificado pela assinatura de renderização `Signature: AG92YWHgOr/TrZy...`.
+  - *Comportamento:* A foto original do estúdio é mantida com fundo nítido e estático enquanto a malha facial é animada sincronizada aos fonemas do áudio, com micro-movimentos de cabeça (*head pose drift*), piscar de olhos e respiração.
+- **Documento Criado:** Elaborado o documento completo [`ARQUITETURA_E_REQUISITOS_AVATAR_TALKING_HEAD.md`](file:///e:/SISTEMAS/CRIAR%20VIDEOS/ARQUITETURA_E_REQUISITOS_AVATAR_TALKING_HEAD.md) catalogando os 3 pilares fundamentais:
+  1. *Entrada de Áudio / Voz:* Áudio curto gravado pelo usuário para clonagem local no `VoiceStudio` ou voz neural instantânea via TTS.
+  2. *Motor de Animação e Lip-Sync:* Comparativo entre a rota em nuvem (Hedra API / HeyGen API - idêntica ao arquivo de teste) e a rota local open-source gratuita (LivePortrait / SadTalker + GFPGAN).
+  3. *Pipeline do SaaS:* Automação de 1 clique integrando geração de fala + renderização do talking head + composição Remotion com gameplay e fotos de matérias.
+
 ---
 
 ## 5. Diretrizes de Execução e Próximos Passos Consolidados
