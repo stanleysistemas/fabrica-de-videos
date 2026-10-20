@@ -43,7 +43,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Endpoint: Scrape de Matéria de Blog / Notícia e Geração de Roteiro
 app.post('/api/news/scrape', async (req: Request, res: Response) => {
   try {
-    const { url, styleMode, targetDurationMinutes, brollChannel } = req.body;
+    const { url, styleMode, targetDurationMinutes, brollChannel, themeFocus, customPrompt } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL da matéria é obrigatória' });
     }
@@ -51,6 +51,8 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
     const article = await newsScraperService.scrapeUrl(url);
     const plan = newsDirectorService.generateVideoPlan({
       article,
+      themeFocus: themeFocus || 'all',
+      customPrompt,
       styleMode: styleMode || 'gamer_streamer',
       targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
       brollChannel: brollChannel || '@stanleyalvesbr',
@@ -62,16 +64,18 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Recalcular Roteiro com Imagens Selecionadas pelo Usuário
-app.post('/api/news/recalculate-plan', async (req: Request, res: Response) => {
+// Endpoint: Gerar Novo Roteiro com Foco Temático sem Raspar Novamente
+app.post('/api/news/generate-plan', async (req: Request, res: Response) => {
   try {
-    const { article, styleMode, selectedImageIds, targetDurationMinutes, brollChannel } = req.body;
+    const { article, themeFocus, customPrompt, styleMode, selectedImageIds, targetDurationMinutes, brollChannel } = req.body;
     if (!article) {
       return res.status(400).json({ error: 'Dados do artigo são obrigatórios' });
     }
 
     const plan = newsDirectorService.generateVideoPlan({
       article,
+      themeFocus: themeFocus || 'all',
+      customPrompt,
       styleMode: styleMode || 'gamer_streamer',
       selectedImageIds,
       targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
@@ -80,7 +84,36 @@ app.post('/api/news/recalculate-plan', async (req: Request, res: Response) => {
 
     res.json({ success: true, plan });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Falha ao recalcular roteiro' });
+    res.status(500).json({ error: err.message || 'Falha ao gerar plano temático' });
+  }
+});
+
+// Endpoint: Listar Histórico de Matérias Salvas no SQLite
+app.get('/api/news/history', async (req: Request, res: Response) => {
+  try {
+    const { newsDbService } = await import('./services/newsDbService');
+    const articles = newsDbService.listRecentArticles(30);
+    res.json({ success: true, articles });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao consultar histórico de matérias' });
+  }
+});
+
+// Endpoint: Obter Texto Bruto .TXT da Matéria
+app.get('/api/news/article/:id/raw-text', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const txtPath = path.resolve(process.cwd(), 'storage', 'news_cache', `${id}.txt`);
+    const fs = await import('fs');
+    if (fs.existsSync(txtPath)) {
+      const content = fs.readFileSync(txtPath, 'utf8');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.send(content);
+    } else {
+      res.status(404).json({ error: 'Arquivo de texto bruto não encontrado' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao carregar texto bruto' });
   }
 });
 
