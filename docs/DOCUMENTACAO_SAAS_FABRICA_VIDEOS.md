@@ -10,15 +10,31 @@
 
 O objetivo é transformar a coleção de ferramentas e repositórios existentes em uma **plataforma SaaS unificada de geração e edição programática de vídeos**, permitindo a criadores, times de marketing e desenvolvedores produzirem vídeos de alta retenção sem necessidade de gravação tradicional ou softwares manuais como Premiere/CapCut.
 
-### As 4 Linhas de Produção da Fábrica:
-1. **Linha 1 — SaaS & Screen Demos Sintéticos (via `OpenMontage`):**  
-   Criação de demonstrações de software sem gravação de tela física. O usuário envia uma URL ou prints, e o sistema anima cursores, digitação, balões explicativos (`ScreenshotScene`) e comandos de terminal (`TerminalScene`).
-2. **Linha 2 — Vídeos Falados & Legendas Virais (via `saas_videos` + Whisper):**  
-   Upload de vídeo falado ou locução gravada com geração de legendas dinâmicas palavra por palavra (estilos Pílula, Karaokê e Caixa), com *safe zones* inteligentes para 9:16 (Shorts/TikTok) e 16:9 (YouTube).
-3. **Linha 3 — Motion Graphics Baseado em Código (via `awesome-opus5-5-videos`):**  
-   Geração de animações visuais ricas (Three.js, Canvas, SVG, GSAP) usando como catalisador a biblioteca curada de 703 prompts de diretores testados.
-4. **Linha 4 — Documentários & B-Rolls Inteligentes (via `VOX` + `OpenMontage Backlot`):**  
-   Narrativas com recortes históricos, texturas de papel, áudio ASMR e montagem de clipes de movimento reais via fal.ai/Kling/Veo ou acervo stock.
+### As 6 Linhas de Produção da Fábrica:
+1. **Linha 1 — Vídeo de Referência Viral (Multimodal & Blueprint):**  
+   Análise de vídeos virais de concorrentes (YouTube/TikTok), extração de blueprint de retenção e recriação de roteiro com +15% de margem de fala e preview Remotion.
+2. **Linha 2 — Notícia / Artigo para Vídeo (URL to Video):**  
+   Extração inteligente de blogs e portais (ex: Call of Duty, portais tech/games), download de imagens HD, animação Ken Burns 2.5D, roteirização com gancho e painel de aprovação do usuário.
+3. **Linha 3 — Avatar Studio & Apresentador Virtual (Talking Head / Streamer Layout):**  
+   Gestão de avatares com base em fotos foto-realistas (ex: streamer gamer de meia idade no estúdio com monitores e microfone), com sincronia labial e layout de webcam alternada.
+4. **Linha 4 — Laboratório de Vozes (VoiceStudio & Voice Vault):**  
+   Clonagem local com 5s de áudio ou Voice Design por texto com custo $0 na máquina (aceleração Intel i5-13500 20T GGUF ou NVIDIA CUDA) com fallback ElevenLabs.
+5. **Linha 5 — Thumbnail Studio Viral:**  
+   Composição de capas de alto clique (CTR) com recorte do avatar, iluminação de contorno (rim light), títulos chamativos e conexão com APIs gratuitas / ComfyUI local.
+6. **Linha 6 — Demos Sintéticas & Motion Graphics (`OpenMontage` + `awesome-opus5-5-videos` + `VOX`):**  
+   Cenas com terminal, gráficos animados, mockups de celular e efeitos sonoros ASMR de papel, fita e cliques de teclado.
+
+---
+
+## 2. Roteiro de Execução Ordenado (Um Passo por Vez)
+
+| Etapa | Módulo | Status | Descrição e Escopo |
+| :--- | :--- | :--- | :--- |
+| **Passo 1** | **Sidebar / Menu Geral Modular** | 🟡 **Em Execução** | Estruturação de menu lateral retrátil com navegação limpa para evitar sobrecarga de opções. |
+| **Passo 2** | **Módulo Notícia / URL to Video** | ⏳ Próximo | Scraper de matérias (Call of Duty / notícias), extração de fotos, roteiro IA com aprovação e Ken Burns. |
+| **Passo 3** | **Avatar Studio (Apresentador Gamer)** | ⏳ Planejado | Cadastro de avatares (foto do streamer), associação de voz e cenas de webcam intercaladas no Remotion. |
+| **Passo 4** | **Thumbnail Studio Viral** | ⏳ Planejado | Criação de capas com recorte automático, textos de impacto e integração com APIs de imagem. |
+| **Passo 5** | **Conector ComfyUI Local & REA HeyGen** | ⏳ Planejado | Estudo de engenharia reversa no estúdio HeyGen e conector opcional com ComfyUI em `localhost:8188`. |
 
 ---
 
