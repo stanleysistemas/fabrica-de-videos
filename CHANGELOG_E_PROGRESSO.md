@@ -42,7 +42,7 @@
    - Gravação e screenshots confirmaram a alternância instantânea entre modo Vertical (9:16) e Horizontal (16:9) e a reprodução fluida das animações no Remotion Player.
 
 6. **Publicação Oficial no GitHub:**
-   - Repositório remoto criado e sincronizado em: [github.com/stanleysistemas/saas-video-factory](https://github.com/stanleysistemas/saas-video-factory)
+   - Repositório remoto oficial: [github.com/stanleysistemas/fabrica-de-videos](https://github.com/stanleysistemas/fabrica-de-videos)
    - Branch `main` ativa e com rastreamento remoto configurado.
 
 ---
