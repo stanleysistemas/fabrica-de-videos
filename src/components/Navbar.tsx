@@ -55,13 +55,26 @@ export const Navbar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Badge de Hardware Ativo */}
+          <button
+            onClick={openVoiceLab}
+            title="Clique para configurar o motor VoiceStudio e aceleração de Hardware"
+            className="hidden lg:flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition-all shadow-sm"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Motor: VoiceStudio</span>
+            <span className="text-[10px] bg-slate-800 text-cyan-300 px-1.5 py-0.2 rounded border border-slate-700 font-mono">
+              CPU GGUF (20T)
+            </span>
+          </button>
+
           {/* Botão Laboratório de Vozes */}
           <button
             onClick={openVoiceLab}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-emerald-500/50 transition-all shadow-sm"
           >
             <Mic className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Vozes Clonadas</span>
+            <span className="hidden sm:inline">Vozes & Hardware</span>
           </button>
 
           {/* Botão Configurações de APIs */}

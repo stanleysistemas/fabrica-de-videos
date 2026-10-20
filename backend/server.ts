@@ -6,11 +6,14 @@ import { scriptDirectorService } from './services/scriptDirectorService';
 import { renderService } from './services/renderService';
 import { qaInspectorService } from './services/qaInspectorService';
 
+import { hardwareService } from './services/hardwareService';
+import { voiceStudioService } from './services/voiceStudioService';
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Servir arquivos do storage (MP4s, stills e assets)
 app.use('/storage', express.static(path.resolve(process.cwd(), 'storage')));
@@ -19,7 +22,7 @@ app.use('/storage', express.static(path.resolve(process.cwd(), 'storage')));
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'online',
-    version: '1.0.0',
+    version: '1.1.0',
     nodeVersion: process.version,
     platform: process.platform,
     engines: {
@@ -27,8 +30,84 @@ app.get('/api/health', (req: Request, res: Response) => {
       claudeDirector: 'active',
       ffmpegQA: 'installed',
       remotionRenderer: 'ready',
+      voiceStudioLocal: 'ready',
+      hardwareEngine: 'active',
     },
   });
+});
+
+// Endpoint: Detecção e status de Hardware (GPU NVIDIA CUDA / CPU GGUF)
+app.get('/api/hardware/detect', async (req: Request, res: Response) => {
+  try {
+    const profile = await hardwareService.detectHardware();
+    res.json({ success: true, hardware: profile });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao detectar hardware' });
+  }
+});
+
+// Endpoint: Salvar preferência de hardware do usuário
+app.post('/api/hardware/preference', (req: Request, res: Response) => {
+  const { mode } = req.body;
+  if (!['auto', 'cuda', 'cpu_gguf'].includes(mode)) {
+    return res.status(400).json({ error: 'Modo inválido. Escolha: auto, cuda ou cpu_gguf' });
+  }
+  hardwareService.setPreference(mode);
+  res.json({ success: true, activeMode: mode });
+});
+
+// Endpoint: Status do Motor VoiceStudio Local
+app.get('/api/voice-studio/status', async (req: Request, res: Response) => {
+  try {
+    const status = await voiceStudioService.getEngineStatus();
+    res.json({ success: true, status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao consultar VoiceStudio' });
+  }
+});
+
+// Endpoint: Listar Vozes do Vault Local
+app.get('/api/voice-studio/voices', async (req: Request, res: Response) => {
+  try {
+    const voices = await voiceStudioService.listVoices();
+    res.json({ success: true, voices });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao carregar vozes' });
+  }
+});
+
+// Endpoint: Clonar Voz Localmente via VoiceStudio
+app.post('/api/voice-studio/clone', async (req: Request, res: Response) => {
+  try {
+    const { name, tone, description, voiceDesignPrompt, sampleBase64, preferredMode } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Nome da voz é obrigatório' });
+    }
+
+    const cloned = await voiceStudioService.cloneVoice({
+      name,
+      tone: tone || 'grave',
+      description: description || '',
+      voiceDesignPrompt,
+      sampleBase64,
+      preferredMode,
+    });
+
+    res.json({ success: true, voice: cloned });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao clonar voz localmente' });
+  }
+});
+
+// Endpoint: Deletar Voz Local
+app.delete('/api/voice-studio/voices/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await voiceStudioService.deleteVoice(id);
+    res.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao remover voz' });
+  }
 });
 
 // Endpoint: Visão Multimodal de Vídeo (Assistir Referência do YouTube)

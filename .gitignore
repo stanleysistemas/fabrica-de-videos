@@ -23,6 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 
+# Storage & media
+storage/audio_samples/*
+storage/mp4/*
+storage/stills/*
+!storage/.gitkeep
+
 # Environment variables
 .env
 .env.production

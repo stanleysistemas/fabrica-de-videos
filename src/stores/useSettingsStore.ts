@@ -17,11 +17,47 @@ export interface ApiKeysConfig {
   elevenLabsApiKey: string;
 }
 
+export interface HardwareOption {
+  id: 'auto' | 'cuda' | 'cpu_gguf';
+  label: string;
+  description: string;
+  available: boolean;
+  recommended: boolean;
+}
+
+export interface HardwareInfo {
+  cpu: {
+    model: string;
+    cores: number;
+    threads: number;
+    architecture: string;
+  };
+  gpus: Array<{
+    name: string;
+    vendor: string;
+    vramMB?: number;
+    driverVersion?: string;
+    cudaSupported: boolean;
+    discrete: boolean;
+  }>;
+  ramGB: number;
+  hasNvidiaCuda: boolean;
+  recommendedMode: 'cuda' | 'cpu_gguf';
+  activeMode: 'auto' | 'cuda' | 'cpu_gguf';
+  options: HardwareOption[];
+}
+
 interface SettingsState {
   apiKeys: ApiKeysConfig;
   clonedVoices: ClonedVoice[];
   isApiSettingsOpen: boolean;
   isVoiceLabOpen: boolean;
+  hardware: HardwareInfo | null;
+  isLoadingHardware: boolean;
+  defaultEngine: 'voicestudio_local' | 'elevenlabs';
+  setDefaultEngine: (engine: 'voicestudio_local' | 'elevenlabs') => void;
+  fetchHardware: () => Promise<void>;
+  setHardwareMode: (mode: 'auto' | 'cuda' | 'cpu_gguf') => Promise<void>;
   setApiKeys: (keys: Partial<ApiKeysConfig>) => void;
   openApiSettings: () => void;
   closeApiSettings: () => void;
@@ -68,6 +104,49 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   clonedVoices: defaultVoices,
   isApiSettingsOpen: false,
   isVoiceLabOpen: false,
+  hardware: null,
+  isLoadingHardware: false,
+  defaultEngine: (localStorage.getItem('default_voice_engine') as any) || 'voicestudio_local',
+
+  setDefaultEngine: (engine) => {
+    localStorage.setItem('default_voice_engine', engine);
+    set({ defaultEngine: engine });
+  },
+
+  fetchHardware: async () => {
+    set({ isLoadingHardware: true });
+    try {
+      const res = await fetch('http://localhost:3001/api/hardware/detect');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.hardware) {
+          set({ hardware: data.hardware });
+        }
+      }
+    } catch (err) {
+      console.warn('[useSettingsStore] Falha ao detectar hardware:', err);
+    } finally {
+      set({ isLoadingHardware: false });
+    }
+  },
+
+  setHardwareMode: async (mode) => {
+    try {
+      const res = await fetch('http://localhost:3001/api/hardware/preference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
+      if (res.ok) {
+        set((state) => ({
+          hardware: state.hardware ? { ...state.hardware, activeMode: mode } : null,
+        }));
+      }
+    } catch (err) {
+      console.error('[useSettingsStore] Erro ao salvar modo de hardware:', err);
+    }
+  },
+
   setApiKeys: (keys) =>
     set((state) => {
       const updated = { ...state.apiKeys, ...keys };
