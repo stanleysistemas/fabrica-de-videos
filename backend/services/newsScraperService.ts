@@ -132,7 +132,7 @@ class NewsScraperService {
             srcLower.includes('pixel') ||
             srcLower.endsWith('.svg');
 
-          if (!seenUrls.has(resolvedSrc) && !isTrackingOrIcon && images.length < 10) {
+          if (!seenUrls.has(resolvedSrc) && !isTrackingOrIcon && images.length < 60) {
             seenUrls.add(resolvedSrc);
             images.push({
               id: `img_${images.length + 1}`,

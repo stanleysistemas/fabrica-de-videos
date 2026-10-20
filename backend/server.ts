@@ -43,7 +43,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Endpoint: Scrape de Matéria de Blog / Notícia e Geração de Roteiro
 app.post('/api/news/scrape', async (req: Request, res: Response) => {
   try {
-    const { url, styleMode } = req.body;
+    const { url, styleMode, targetDurationMinutes, brollChannel } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL da matéria é obrigatória' });
     }
@@ -52,6 +52,8 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
     const plan = newsDirectorService.generateVideoPlan({
       article,
       styleMode: styleMode || 'gamer_streamer',
+      targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
+      brollChannel: brollChannel || '@stanleyalvesbr',
     });
 
     res.json({ success: true, article, plan });
@@ -63,7 +65,7 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
 // Endpoint: Recalcular Roteiro com Imagens Selecionadas pelo Usuário
 app.post('/api/news/recalculate-plan', async (req: Request, res: Response) => {
   try {
-    const { article, styleMode, selectedImageIds } = req.body;
+    const { article, styleMode, selectedImageIds, targetDurationMinutes, brollChannel } = req.body;
     if (!article) {
       return res.status(400).json({ error: 'Dados do artigo são obrigatórios' });
     }
@@ -72,6 +74,8 @@ app.post('/api/news/recalculate-plan', async (req: Request, res: Response) => {
       article,
       styleMode: styleMode || 'gamer_streamer',
       selectedImageIds,
+      targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
+      brollChannel: brollChannel || '@stanleyalvesbr',
     });
 
     res.json({ success: true, plan });
