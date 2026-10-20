@@ -38,6 +38,51 @@ O objetivo é transformar a coleção de ferramentas e repositórios existentes 
 
 ---
 
+## 3. Arquitetura de Vídeos Longos: Modelo Hayashii / Streamer Gameplay
+
+Inspirado na referência de maior audiência do YouTube brasileiro de Call of Duty ([Hayashii - Vídeo de Referência](https://www.youtube.com/watch?v=dvXbEAH79JI)), esta arquitetura viabiliza vídeos de **3 a 15 minutos** sem risco de conteúdo repetitivo ou perda de retenção.
+
+### 3.1. As 5 Camadas de Composição no Remotion:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  VÍDEO FINAL ESTILO HAYASHII (1080p Horizontal 16:9)                   │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  [CAMADA 1: GAMEPLAY CONTÍNUA EM MOVIMENTO]                           │
+│  Vídeo fluido de gameplay de fundo sem cortes bruscos, puxado          │
+│  diretamente das lives do canal @stanleyalvesbr (áudio original        │
+│  removido para evitar ruídos e manter custo $0 e 0% copyright).        │
+│                                                                        │
+│  [CAMADA 2: DESTAQUES OFICIAIS COM ANIMAÇÃO KEN BURNS]                │
+│  No momento exato em que o roteiro cita uma arma, operador ou         │
+│  equipamento, a imagem HD oficial da Activision entra na tela com      │
+│  zoom suave e desfoque de fundo (duração: 4 a 6 segundos).             │
+│                                                                        │
+│  [CAMADA 3: NARRADOR / AVATAR NA WEBCAM]       [CAMADA 4: STREAMER]    │
+│  O apresentador (Stanley Gamer) narrando a     ┌──────────────────┐    │
+│  matéria inteira na webcam no canto inferior   │ 🎙️ Stanley Gamer │    │
+│  com animação labial e gestos naturais.        │ [Webcam no Canto]│    │
+│                                                └──────────────────┘    │
+│  [CAMADA 5: LEGENDAS & MARCADORES SEGUROS]                            │
+│  Legenda estilo pílula/karaokê na safe zone inferior.                 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2. Fluxo de Entrada em 3 Etapas:
+1. **Definição Prévia de Duração e Formato:**
+   * O usuário escolhe antes de tudo a duração pretendida:
+     * ⏱️ **3 Minutos (Notícia Expressa):** ~20 tomadas visuais.
+     * ⏱️ **5 Minutos (Matéria Padrão YouTube):** ~35 tomadas visuais.
+     * ⏱️ **8 a 12 Minutos (Dossiê Completo de Lançamento):** Cobertura detalhada de todas as categorias de armas e operadores.
+2. **Seleção de B-Roll (Gameplay de Fundo):**
+   * Link de live/vídeo do canal `@stanleyalvesbr` ou arquivo `.mp4` local da máquina (com extração de vídeo sem áudio).
+3. **Extração Irrestrita da Matéria & Roteiro Dimensionado:**
+   * Download de todas as fotos (sem teto artificial de 10 fotos).
+   * Roteiro expandido para cobrir toda a extensão do tempo escolhido com a margem de +15% de segurança de fala.
+
+---
+
 ## 2. Diagnóstico dos Novos Componentes Analisados
 
 ### 2.1. `OpenMontage` (O Salto Quântico em Arquitetura de Produção)
