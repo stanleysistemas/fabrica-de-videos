@@ -120,7 +120,7 @@ class NewsDbService {
 
     article.sections.forEach((sec, idx) => {
       insertSection.run(
-        sec.id || `sec_${article.id}_${idx}`,
+        `sec_${article.id}_${idx}`,
         article.id,
         sec.heading,
         sec.subheading || null,
@@ -138,7 +138,7 @@ class NewsDbService {
 
     article.images.forEach((img, idx) => {
       insertImage.run(
-        img.id,
+        `img_${article.id}_${idx}`,
         article.id,
         img.url,
         img.alt || null,

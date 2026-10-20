@@ -97,40 +97,84 @@ class NewsDirectorService {
 
     const scenes: NewsSceneDraft[] = [];
 
-    // Duração alvo em segundos (de 1 a 15 minutos) com limite de 900s
-    const targetSeconds = Math.min(900, Math.max(60, targetDurationMinutes * 60));
+    // SE FOR VÍDEO CURTO DE 1 MINUTO (60 Segundos) - COMPOSIÇÃO DE TESTE STREAMER
+    if (targetDurationMinutes === 1) {
+      const avatarSetup = 'http://localhost:3001/storage/avatars/avatar_stanley_setup.jpg';
+      const avatarWebcam = 'http://localhost:3001/storage/avatars/avatar_stanley_webcam.jpg';
+      const codWeaponImg = availableImages.find(img => img.category === 'fuzis_e_armas' && img.url.includes('WEAPONS'))?.url 
+        || availableImages[1]?.url 
+        || 'https://imgs.callofduty.com/content/dam/atvi/callofduty/cod-touchui/blog/body/mw4/rfl-ops-and-weapons/MW4-RFL-OPS-WEAPONS-000.webp';
 
-    // 2. Cena 1: Abertura / Gancho com Apresentação do Foco
-    let hookHeading = 'BOMBA: GUIA COMPLETO';
-    let hookSubheading = 'Lançamento Oficial';
-    let hookNarration = '';
+      const scenes1Min: NewsSceneDraft[] = [
+        {
+          id: `scene_intro_${Date.now()}`,
+          order: 1,
+          type: 'avatar_intro',
+          heading: 'BOMBA: NOVO MODERN WARFARE 4',
+          subheading: 'Apresentação com Stanley Alves',
+          narration: 'Fala galera! Aqui é o Stanley Alves trazendo em primeira mão as novidades oficiais do Call of Duty Modern Warfare 4! A Activision liberou todos os detalhes do arsenal e do novo Armeiro 2.0. Se liga!',
+          durationInSeconds: 10,
+          associatedImageUrl: avatarSetup,
+          kenBurnsEffect: 'zoom_in',
+          layoutMode: 'avatar_fullscreen',
+        },
+        {
+          id: `scene_gameplay_${Date.now()}`,
+          order: 2,
+          type: 'gameplay_broll',
+          heading: 'GAMEPLAY AO VIVO: @STANLEYALVESBR',
+          subheading: 'Domínio de Mapa & Movimentação',
+          narration: 'Dá uma olhada nessa gameplay de fundo do nosso canal na Twitch e YouTube! É com essa movimentação ágil e mira no ponto que vamos testar as novas armas de lançamento do multiplayer.',
+          durationInSeconds: 15,
+          associatedImageUrl: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=1400&auto=format&fit=crop',
+          kenBurnsEffect: 'pan_right',
+          layoutMode: 'gameplay_with_webcam',
+        },
+        {
+          id: `scene_weapon_${Date.now()}`,
+          order: 3,
+          type: 'ken_burns_news',
+          heading: 'MATÉRIA: FUZIL HAN 86 & APEX',
+          subheading: 'Arsenal Oficial de Lançamento',
+          narration: 'Na matéria oficial, o grande destaque é o fuzil de assalto Han 86 calibrado para 5.56 com alta cadência! E ele vem com o Acessório Apex Han X20 Rasga-céu, que dispara projéteis de 20mm de explosão aérea pra tirar qualquer inimigo da cobertura!',
+          durationInSeconds: 20,
+          associatedImageUrl: codWeaponImg,
+          kenBurnsEffect: 'zoom_in',
+          layoutMode: 'webcam_streamer',
+          category: 'fuzis_e_armas',
+        },
+        {
+          id: `scene_outro_${Date.now()}`,
+          order: 4,
+          type: 'avatar_outro',
+          heading: 'INSCREVA-SE NO CANAL',
+          subheading: 'Deixe seu Like & Comentário',
+          narration: 'E você, o que achou do Han 86? Deixa nos comentários se você vai jogar no lançamento, esmaga o botão de like e segue o canal @stanleyalvesbr pra não perder nenhuma gameplay e guia completo!',
+          durationInSeconds: 15,
+          associatedImageUrl: avatarSetup,
+          kenBurnsEffect: 'zoom_out',
+          layoutMode: 'avatar_fullscreen',
+        },
+      ];
 
-    if (themeFocus === 'weapons') {
-      hookHeading = 'ARSENAL COMPLETO DE MW4';
-      hookSubheading = 'Todas as Armas & Acessórios Apex';
-      hookNarration = isGamer
-        ? `Fala galera! Atenção porque a Activision liberou o catálogo oficial com todas as armas do novo Call of Duty! Nós vamos passar fuzil por fuzil, submetralhadoras, snipers e os novos Acessórios Apex secretos que mudam completamente o meta. Fica ligado até o fim!`
-        : `Olá a todos. Sejam muito bem-vindos. No vídeo de hoje faremos uma análise técnica aprofundada de todo o arsenal de armas, calibres e conversões Apex de Modern Warfare 4.`;
-    } else if (themeFocus === 'operators') {
-      hookHeading = 'TODOS OS 33 OPERADORES';
-      hookSubheading = 'Facções & Desbloqueios';
-      hookNarration = isGamer
-        ? `Fala comunidade gamer! Hoje o foco é nos 33 operadores de lançamento de Modern Warfare 4! Vamos ver as skins, as forças especiais e como desbloquear cada um na Campanha e na DMZ sem perder tempo!`
-        : `Bem-vindos. Hoje vamos detalhar todos os 33 operadores disponíveis no lançamento de Modern Warfare 4 e seus respectivos critérios de desbloqueio.`;
-    } else if (themeFocus === 'equipment') {
-      hookHeading = 'EQUIPAMENTOS & VANTAGENS';
-      hookSubheading = 'Séries de Baixas & Armeiro 2.0';
-      hookNarration = isGamer
-        ? `Fala esquadrão! Hoje vamos analisar as melhores séries de baixas, equipamentos táticos e o novo sistema de vantagens do multiplayer de Modern Warfare 4!`
-        : `Olá. Sejam bem-vindos à nossa cobertura sobre o sistema de vantagens, melhorias de campo e equipamentos táticos de Modern Warfare 4.`;
-    } else {
-      hookNarration = isGamer
-        ? `Fala galera! Atenção total porque foram reveladas as informações oficiais completas de ${article.title.slice(0, 45)}! Nós vamos conferir todas as armas, operadores e novidades do multiplayer juntos agora!`
-        : `Olá a todos. Sejam muito bem-vindos. Hoje vamos analisar o guia oficial de lançamento: ${article.title.slice(0, 50)}.`;
+      return {
+        id: `plan_1min_${Date.now()}`,
+        articleId: article.id,
+        title: 'Modern Warfare 4: Fuzil Han 86 & Gameplay com Stanley Alves',
+        themeFocus,
+        targetDurationMinutes: 1,
+        totalDurationSeconds: 60,
+        scenes: scenes1Min,
+        suggestedVoiceId: 'voice_stanley_alves',
+        styleMode,
+        brollSource: {
+          channel: brollChannel,
+          label: `Gameplay ao vivo canal ${brollChannel}`,
+        },
+      };
     }
 
-    const hookDuration = this.calculateDurationWithSafetyMargin(hookNarration, 8);
-
+    // Caso normal para 3, 5, 10 ou 15 minutos:
     scenes.push({
       id: `scene_hook_${Date.now()}`,
       order: 1,
@@ -142,7 +186,7 @@ class NewsDirectorService {
       associatedImageId: availableImages[0]?.id,
       associatedImageUrl: availableImages[0]?.url,
       kenBurnsEffect: 'zoom_in',
-      layoutMode: 'webcam_streamer',
+      layoutMode: 'avatar_fullscreen',
     });
 
     let currentDuration = hookDuration;
