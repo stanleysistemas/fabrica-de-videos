@@ -1,10 +1,12 @@
 import React from 'react';
 import { useProjectStore } from '../stores/useProjectStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 import { AspectRatio } from '../types';
-import { Sparkles, Smartphone, Monitor, Square, Video } from 'lucide-react';
+import { Sparkles, Smartphone, Monitor, Square, Video, Mic, Key } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { project, setAspectRatio } = useProjectStore();
+  const { openApiSettings, openVoiceLab } = useSettingsStore();
 
   const formats: { id: AspectRatio; label: string; icon: React.ReactNode }[] = [
     { id: '9:16', label: 'Vertical 9:16 (Shorts/TikTok)', icon: <Smartphone className="w-4 h-4" /> },
@@ -52,11 +54,24 @@ export const Navbar: React.FC = () => {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>Engenharia Reversa Ativa</span>
-          </div>
+        <div className="flex items-center gap-2">
+          {/* Botão Laboratório de Vozes */}
+          <button
+            onClick={openVoiceLab}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-emerald-500/50 transition-all shadow-sm"
+          >
+            <Mic className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Vozes Clonadas</span>
+          </button>
+
+          {/* Botão Configurações de APIs */}
+          <button
+            onClick={openApiSettings}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-indigo-500/50 transition-all shadow-sm"
+          >
+            <Key className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Chaves de API</span>
+          </button>
         </div>
       </div>
     </header>

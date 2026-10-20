@@ -10,6 +10,8 @@ import { Step3Brand } from './components/steps/Step3Brand';
 import { Step4Assets } from './components/steps/Step4Assets';
 import { Step5Audio } from './components/steps/Step5Audio';
 import { Step6Review } from './components/steps/Step6Review';
+import { ApiSettingsModal } from './components/ApiSettingsModal';
+import { VoiceLabModal } from './components/VoiceLabModal';
 import { PlayCircle, ShieldCheck, Sparkles, Layers } from 'lucide-react';
 
 export function App() {
@@ -95,6 +97,10 @@ export function App() {
           </div>
         </aside>
       </main>
+
+      {/* Modais Globais de Configuração */}
+      <ApiSettingsModal />
+      <VoiceLabModal />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import React from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
 import { SubtitleStyle } from '../../types';
 import { Volume2, Mic, Music, Subtitles, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export const Step5Audio: React.FC = () => {
   const { project, setSubtitleStyle, nextStep, prevStep } = useProjectStore();
+  const { clonedVoices, openVoiceLab } = useSettingsStore();
 
   const subtitleStyles: { id: SubtitleStyle; title: string; desc: string; preview: string }[] = [
     {
@@ -39,26 +41,50 @@ export const Step5Audio: React.FC = () => {
         </p>
       </div>
 
-      {/* Seletor de Voz */}
+      {/* Seletor de Vozes com Integração das Vozes Clonadas */}
       <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-300">
             <Mic className="w-4 h-4 text-emerald-400" />
-            Motor de Voz & Locução
+            Sua Biblioteca de Vozes (VoiceStudio Local)
           </div>
-          <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-            VoiceStudio Integrado (Zero Custo por Minuto)
-          </span>
+          <button
+            type="button"
+            onClick={openVoiceLab}
+            className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 transition-all flex items-center gap-1"
+          >
+            <span>+ Clonar Nova Voz</span>
+          </button>
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500 text-left transition-all">
-            <div className="font-bold text-xs text-white">Locutor Documentário (Grave & Misterioso)</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Voz local OmniVoice - Ideal para estilo VOX</div>
-          </button>
-          <button className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-left hover:border-slate-700 transition-all">
-            <div className="font-bold text-xs text-white">Locutora Dinâmica (Energética & Clara)</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Edge-TTS Neural - Ideal para Shorts e Demos</div>
-          </button>
+          {clonedVoices.map((voice) => (
+            <button
+              key={voice.id}
+              type="button"
+              onClick={() => {
+                useProjectStore.setState((state) => ({
+                  project: {
+                    ...state.project,
+                    audio: { ...state.project.audio, voiceName: voice.name },
+                  },
+                }));
+              }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                project.audio.voiceName === voice.name
+                  ? 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-500/10'
+                  : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">{voice.name}</span>
+                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  {voice.tone}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{voice.description}</p>
+            </button>
+          ))}
         </div>
       </div>
 
