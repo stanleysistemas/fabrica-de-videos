@@ -30,11 +30,11 @@ O objetivo é transformar a coleção de ferramentas e repositórios existentes 
 
 | Etapa | Módulo | Status | Descrição e Escopo |
 | :--- | :--- | :--- | :--- |
-| **Passo 1** | **Sidebar / Menu Geral Modular** | 🟡 **Em Execução** | Estruturação de menu lateral retrátil com navegação limpa para evitar sobrecarga de opções. |
-| **Passo 2** | **Módulo Notícia / URL to Video** | ⏳ Próximo | Scraper de matérias (Call of Duty / notícias), extração de fotos, roteiro IA com aprovação e Ken Burns. |
-| **Passo 3** | **Avatar Studio (Apresentador Gamer)** | ⏳ Planejado | Cadastro de avatares (foto do streamer), associação de voz e cenas de webcam intercaladas no Remotion. |
-| **Passo 4** | **Thumbnail Studio Viral** | ⏳ Planejado | Criação de capas com recorte automático, textos de impacto e integração com APIs de imagem. |
-| **Passo 5** | **Conector ComfyUI Local & REA HeyGen** | ⏳ Planejado | Estudo de engenharia reversa no estúdio HeyGen e conector opcional com ComfyUI em `localhost:8188`. |
+| **Passo 1** | **Sidebar / Menu Geral Modular** | ✅ **Concluído** | Menu lateral retrátil com navegação limpa, rodapé de hardware e separação de módulos. |
+| **Passo 2** | **Módulo Notícia / URL to Video** | ⏳ **Próximo** | Scraper de matérias (Call of Duty / notícias), extração de fotos HD, roteiro IA com aprovação e Ken Burns. |
+| **Passo 3** | **Avatar Studio (Clone HeyGen via REA)** | ⏳ Planejado | **Engenharia reversa da interface do HeyGen (`app.heygen.com/home`)** para criar o estúdio universal de avatares para **qualquer nicho** (Gamer, Corporativo, Notícias, Saúde, Finanças, Educativo). Inclui timeline de fala, poses, enquadramentos (círculo, meio-corpo, tela cheia) e suporte dual (API HeyGen oficial + motor local LivePortrait a custo zero). |
+| **Passo 4** | **Thumbnail Studio Viral** | ⏳ Planejado | Criação de capas com recorte automático do avatar escolhido, luz de contorno (rim light) e títulos de alto clique. |
+| **Passo 5** | **Conector ComfyUI Local & Modelos Livres** | ⏳ Planejado | Conexão REST com ComfyUI em `localhost:8188` e APIs gratuitas de imagem (Google Imagen 3 / Pollinations). |
 
 ---
 
