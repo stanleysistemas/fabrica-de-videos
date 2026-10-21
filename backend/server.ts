@@ -117,6 +117,58 @@ app.get('/api/news/article/:id/raw-text', async (req: Request, res: Response) =>
   }
 });
 
+// Endpoint: Buscar Vídeos Gratuitos de B-Roll (Pexels / Pixabay)
+app.get('/api/stock-videos/search', async (req: Request, res: Response) => {
+  try {
+    const query = (req.query.q as string) || 'games';
+    const { stockVideoService } = await import('./services/stockVideoService');
+    const videos = await stockVideoService.searchVideos(query);
+    res.json({ success: true, query, total: videos.length, videos });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao buscar vídeos gratuitos' });
+  }
+});
+
+// Endpoint: Obter Status das Chaves de API
+app.get('/api/stock-videos/keys', async (req: Request, res: Response) => {
+  try {
+    const { stockVideoService } = await import('./services/stockVideoService');
+    const keys = stockVideoService.getKeys();
+    res.json({
+      success: true,
+      hasPexels: Boolean(keys.pexelsApiKey),
+      hasPixabay: Boolean(keys.pixabayApiKey),
+      hasHeygen: Boolean(keys.heygenApiKey),
+      hasReplicate: Boolean(keys.replicateApiToken),
+      keys: {
+        pexelsApiKey: keys.pexelsApiKey ? '••••••••' + keys.pexelsApiKey.slice(-4) : '',
+        pixabayApiKey: keys.pixabayApiKey ? '••••••••' + keys.pixabayApiKey.slice(-4) : '',
+        heygenApiKey: keys.heygenApiKey ? '••••••••' + keys.heygenApiKey.slice(-4) : '',
+        replicateApiToken: keys.replicateApiToken ? '••••••••' + keys.replicateApiToken.slice(-4) : '',
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao consultar chaves' });
+  }
+});
+
+// Endpoint: Salvar Chaves de API
+app.post('/api/stock-videos/keys', async (req: Request, res: Response) => {
+  try {
+    const { pexelsApiKey, pixabayApiKey, heygenApiKey, replicateApiToken } = req.body;
+    const { stockVideoService } = await import('./services/stockVideoService');
+    const updated = stockVideoService.saveKeys({
+      pexelsApiKey: pexelsApiKey !== undefined ? pexelsApiKey : undefined,
+      pixabayApiKey: pixabayApiKey !== undefined ? pixabayApiKey : undefined,
+      heygenApiKey: heygenApiKey !== undefined ? heygenApiKey : undefined,
+      replicateApiToken: replicateApiToken !== undefined ? replicateApiToken : undefined,
+    });
+    res.json({ success: true, message: 'Chaves atualizadas com sucesso!' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao salvar chaves' });
+  }
+});
+
 // Endpoint: Detecção e status de Hardware (GPU NVIDIA CUDA / CPU GGUF)
 app.get('/api/hardware/detect', async (req: Request, res: Response) => {
   try {
