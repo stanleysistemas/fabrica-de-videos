@@ -85,6 +85,14 @@ class NewsDbService {
         is_default INTEGER DEFAULT 0,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS outro_presets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        outro_phrase TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -309,6 +317,87 @@ class NewsDbService {
       stmt.run(d.id, d.name, d.hookPhrase, d.readingGuide, d.isDefault, now);
     }
   }
+
+  public getOutroPresets(): OutroPreset[] {
+    const rows = this.db.prepare(`SELECT * FROM outro_presets ORDER BY is_default DESC, name ASC`).all() as any[];
+    if (rows.length === 0) {
+      this.seedDefaultOutroPresets();
+      return this.getOutroPresets();
+    }
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      outroPhrase: r.outro_phrase,
+      isDefault: r.is_default === 1,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  public saveOutroPreset(preset: {
+    id?: string;
+    name: string;
+    outroPhrase: string;
+    isDefault?: boolean;
+  }): OutroPreset {
+    const id = preset.id || `outro_${Date.now()}`;
+    const updatedAt = new Date().toISOString();
+    const isDefaultVal = preset.isDefault ? 1 : 0;
+
+    if (preset.isDefault) {
+      this.db.prepare(`UPDATE outro_presets SET is_default = 0`).run();
+    }
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO outro_presets (id, name, outro_phrase, is_default, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, preset.name, preset.outroPhrase, isDefaultVal, updatedAt);
+
+    return {
+      id,
+      name: preset.name,
+      outroPhrase: preset.outroPhrase,
+      isDefault: Boolean(preset.isDefault),
+      updatedAt,
+    };
+  }
+
+  public deleteOutroPreset(id: string): boolean {
+    const res = this.db.prepare(`DELETE FROM outro_presets WHERE id = ?`).run(id);
+    return (res as any).changes > 0;
+  }
+
+  private seedDefaultOutroPresets() {
+    const defaults = [
+      {
+        id: 'outro_gamer',
+        name: 'Gamer / Streamer (Stanley Alves)',
+        outroPhrase: 'E você, o que achou dessa novidade? Deixa nos comentários qual arma você vai testar primeiro, esmaga o botão de like, se inscreve no canal @stanleyalvesbr e até o próximo vídeo!',
+        isDefault: 1,
+      },
+      {
+        id: 'outro_noticia',
+        name: 'Notícia / Jornalismo / Geral',
+        outroPhrase: 'Qual a sua opinião sobre esse assunto? Comente aqui embaixo, deixe seu like, compartilhe com seus amigos e ative o sininho para acompanhar as próximas atualizações!',
+        isDefault: 0,
+      },
+      {
+        id: 'outro_politica_tech',
+        name: 'Opinião / Política / Tech',
+        outroPhrase: 'O que você acha dessa decisão? Quero ver o seu ponto de vista nos comentários. Inscreva-se no canal para fortalecer o debate e até a próxima análise!',
+        isDefault: 0,
+      },
+    ];
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO outro_presets (id, name, outro_phrase, is_default, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+    for (const d of defaults) {
+      stmt.run(d.id, d.name, d.outroPhrase, d.isDefault, now);
+    }
+  }
 }
 
 export interface IntroPreset {
@@ -316,6 +405,14 @@ export interface IntroPreset {
   name: string;
   hookPhrase: string;
   readingGuide: string;
+  isDefault: boolean;
+  updatedAt: string;
+}
+
+export interface OutroPreset {
+  id: string;
+  name: string;
+  outroPhrase: string;
   isDefault: boolean;
   updatedAt: string;
 }

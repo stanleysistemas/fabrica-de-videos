@@ -45,6 +45,8 @@ class NewsDirectorService {
     brollChannel?: string;
     customHookHeading?: string;
     customHookNarration?: string;
+    customOutroNarration?: string;
+    videoFormatType?: 'live_streamer' | 'vox_documentary' | 'tech_capsule';
     editedFullText?: string;
   }): NewsVideoPlan {
     const {
@@ -57,6 +59,8 @@ class NewsDirectorService {
       brollChannel = '@stanleyalvesbr',
       customHookHeading,
       customHookNarration,
+      customOutroNarration,
+      videoFormatType = 'live_streamer',
       editedFullText,
     } = params;
 
@@ -312,9 +316,13 @@ class NewsDirectorService {
     }
 
     // 4. Cena de Encerramento (Call to Action / Like & Comentário)
-    const outroNarration = isGamer
+    let outroNarration = isGamer
       ? `E agora eu quero a sua opinião sincera: qual dessas armas ou operadores você vai testar primeiro no lançamento? Deixa seu comentário, esmaga o botão de like, se inscreve no canal e até o próximo vídeo!`
       : `Chegamos ao fim da nossa cobertura detalhada. Compartilhe suas impressões nos comentários, deixe seu like e inscreva-se para acompanhar as próximas análises.`;
+
+    if (customOutroNarration && customOutroNarration.trim()) {
+      outroNarration = customOutroNarration.trim();
+    }
 
     const outroDuration = this.calculateDurationWithSafetyMargin(outroNarration, 8);
 

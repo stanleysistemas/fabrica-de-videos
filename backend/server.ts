@@ -11,6 +11,7 @@ import { voiceStudioService } from './services/voiceStudioService';
 import { newsScraperService } from './services/newsScraperService';
 import { newsDirectorService } from './services/newsDirectorService';
 import { newsDbService } from './services/newsDbService';
+import { humanizerService } from './services/humanizerService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ app.get('/api/health', (req: Request, res: Response) => {
       hardwareEngine: 'active',
       newsScraper: 'ready',
       newsDirector: 'ready',
+      humanizer: 'ready',
     },
   });
 });
@@ -53,6 +55,8 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
       customPrompt,
       customHookHeading,
       customHookNarration,
+      customOutroNarration,
+      videoFormatType,
       editedFullText,
     } = req.body;
     if (!url) {
@@ -69,6 +73,8 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
       brollChannel: brollChannel || '@stanleyalvesbr',
       customHookHeading,
       customHookNarration,
+      customOutroNarration,
+      videoFormatType: videoFormatType || 'live_streamer',
       editedFullText,
     });
 
@@ -91,6 +97,8 @@ app.post('/api/news/generate-plan', async (req: Request, res: Response) => {
       brollChannel,
       customHookHeading,
       customHookNarration,
+      customOutroNarration,
+      videoFormatType,
       editedFullText,
     } = req.body;
     if (!article) {
@@ -107,6 +115,8 @@ app.post('/api/news/generate-plan', async (req: Request, res: Response) => {
       brollChannel: brollChannel || '@stanleyalvesbr',
       customHookHeading,
       customHookNarration,
+      customOutroNarration,
+      videoFormatType: videoFormatType || 'live_streamer',
       editedFullText,
     });
 
@@ -156,6 +166,65 @@ app.delete('/api/settings/intro-presets/:id', (req: Request, res: Response) => {
     res.json({ success: true, message: 'Preset removido com sucesso!', presets });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao excluir preset de abertura' });
+  }
+});
+
+// Endpoint: Listar Presets de Encerramento (CTA) Salvos no SQLite
+app.get('/api/settings/outro-presets', (req: Request, res: Response) => {
+  try {
+    const presets = newsDbService.getOutroPresets();
+    res.json({ success: true, presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao consultar presets de encerramento' });
+  }
+});
+
+// Endpoint: Salvar/Atualizar Preset de Encerramento (CTA) no SQLite
+app.post('/api/settings/outro-presets', (req: Request, res: Response) => {
+  try {
+    const { id, name, outroPhrase, isDefault } = req.body;
+    if (!name || !outroPhrase) {
+      return res.status(400).json({ error: 'Nome e frase de encerramento são obrigatórios' });
+    }
+    const saved = newsDbService.saveOutroPreset({
+      id,
+      name,
+      outroPhrase,
+      isDefault: Boolean(isDefault),
+    });
+    const presets = newsDbService.getOutroPresets();
+    res.json({ success: true, message: 'Preset de encerramento salvo!', preset: saved, presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao salvar preset de encerramento' });
+  }
+});
+
+// Endpoint: Excluir Preset de Encerramento (CTA) do SQLite
+app.delete('/api/settings/outro-presets/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    newsDbService.deleteOutroPreset(id);
+    const presets = newsDbService.getOutroPresets();
+    res.json({ success: true, message: 'Preset de encerramento removido!', presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao excluir preset de encerramento' });
+  }
+});
+
+// Endpoint: Humanizar Texto Bruto com o Motor Humanizer
+app.post('/api/text/humanize', async (req: Request, res: Response) => {
+  try {
+    const { text, style } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Texto é obrigatório' });
+    }
+    const result = await humanizerService.humanizeText({
+      text: text.trim(),
+      style: style || 'gamer_streamer',
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao humanizar texto' });
   }
 });
 

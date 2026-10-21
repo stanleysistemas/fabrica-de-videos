@@ -4,7 +4,7 @@ import {
   Gamepad2, Image as ImageIcon, Film, X, AlertTriangle,
   Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
   Upload, CheckCircle2, Video, Play, Pause, Square, Volume2, Camera,
-  Radio, RotateCcw, Save, Filter
+  Radio, RotateCcw, Save, Filter, Wand2, Clapperboard, HeartHandshake
 } from 'lucide-react';
 
 export interface IntroPreset {
@@ -12,6 +12,14 @@ export interface IntroPreset {
   name: string;
   hookPhrase: string;
   readingGuide: string;
+  isDefault: boolean;
+  updatedAt?: string;
+}
+
+export interface OutroPreset {
+  id: string;
+  name: string;
+  outroPhrase: string;
   isDefault: boolean;
   updatedAt?: string;
 }
@@ -267,6 +275,112 @@ export const NewsToVideoView: React.FC = () => {
     }
   };
 
+  // Presets de Encerramento (CTA / Seguir / Like) persistidos no SQLite
+  const [outroPresets, setOutroPresets] = useState<OutroPreset[]>([]);
+  const [selectedOutroPresetId, setSelectedOutroPresetId] = useState<string>('outro_gamer');
+  const [customOutroPhrase, setCustomOutroPhrase] = useState<string>(
+    'E você, o que achou dessa novidade? Deixa nos comentários qual arma você vai testar primeiro, esmaga o botão de like, se inscreve no canal @stanleyalvesbr e até o próximo vídeo!'
+  );
+  const [isSavingOutroPreset, setIsSavingOutroPreset] = useState(false);
+  const [outroSavedFeedback, setOutroSavedFeedback] = useState(false);
+
+  // Tipo de Formato do Vídeo (Live Streamer vs VOX vs Noticiário Ágil)
+  const [videoFormatType, setVideoFormatType] = useState<'live_streamer' | 'vox_documentary' | 'tech_capsule'>('live_streamer');
+
+  // Estado da Humanizer
+  const [isHumanizingText, setIsHumanizingText] = useState(false);
+  const [humanizeFeedback, setHumanizeFeedback] = useState<string | null>(null);
+
+  // Carregar presets de encerramento do SQLite
+  const loadOutroPresets = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/settings/outro-presets');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.presets && data.presets.length > 0) {
+          setOutroPresets(data.presets);
+          const defaultPreset = data.presets.find((p: OutroPreset) => p.isDefault) || data.presets[0];
+          setSelectedOutroPresetId(defaultPreset.id);
+          setCustomOutroPhrase(defaultPreset.outroPhrase);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar presets de encerramento:', err);
+    }
+  };
+
+  const handleSelectOutroPreset = (presetId: string) => {
+    setSelectedOutroPresetId(presetId);
+    const p = outroPresets.find((x) => x.id === presetId);
+    if (p) {
+      setCustomOutroPhrase(p.outroPhrase);
+    }
+  };
+
+  const handleSaveCurrentOutroPreset = async () => {
+    if (!customOutroPhrase.trim()) {
+      alert('Informe a frase de encerramento.');
+      return;
+    }
+    setIsSavingOutroPreset(true);
+    try {
+      const current = outroPresets.find((p) => p.id === selectedOutroPresetId);
+      const res = await fetch('http://localhost:3001/api/settings/outro-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedOutroPresetId,
+          name: current?.name || 'Preset Personalizado',
+          outroPhrase: customOutroPhrase.trim(),
+          isDefault: true,
+        }),
+      });
+      if (res.ok) {
+        setOutroSavedFeedback(true);
+        setTimeout(() => setOutroSavedFeedback(false), 2500);
+        await loadOutroPresets();
+      }
+    } catch (err) {
+      console.error('Erro ao salvar preset de encerramento:', err);
+      alert('Erro ao salvar preset no banco.');
+    } finally {
+      setIsSavingOutroPreset(false);
+    }
+  };
+
+  // Disparar o Humanizer para polir o texto recortado
+  const handleHumanizeText = async () => {
+    if (!editedFullText.trim()) {
+      alert('Não há texto no editor para humanizar.');
+      return;
+    }
+    setIsHumanizingText(true);
+    setHumanizeFeedback(null);
+    try {
+      const res = await fetch('http://localhost:3001/api/text/humanize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: editedFullText,
+          style: videoFormatType,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.humanizedText) {
+          setEditedFullText(data.humanizedText);
+          setHumanizeFeedback('Texto humanizado com sucesso!');
+          setTimeout(() => setHumanizeFeedback(null), 3000);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao humanizar texto:', err);
+      alert('Erro de conexão com o serviço de humanização.');
+    } finally {
+      setIsHumanizingText(false);
+    }
+  };
+
   // Carregar catálogo real de vozes
   const loadVoices = async () => {
     setIsLoadingVoices(true);
@@ -298,6 +412,7 @@ export const NewsToVideoView: React.FC = () => {
   useEffect(() => {
     loadVoices();
     loadIntroPresets();
+    loadOutroPresets();
   }, []);
 
   // Quando troca o motor de voz (VoiceStudio vs ElevenLabs), atualiza a voz selecionada
@@ -506,7 +621,7 @@ export const NewsToVideoView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: url.trim(),
-          styleMode: 'gamer_streamer',
+          styleMode: videoFormatType,
           targetDurationMinutes,
           brollChannel: brollVideoSource,
           themeFocus: 'all',
@@ -515,6 +630,8 @@ export const NewsToVideoView: React.FC = () => {
           selectedVoiceId,
           customHookHeading: activePreset?.name || 'BOMBA: NOTÍCIA OFICIAL',
           customHookNarration: customHookPhrase,
+          customOutroNarration: customOutroPhrase,
+          videoFormatType,
         }),
       });
 
@@ -615,6 +732,16 @@ export const NewsToVideoView: React.FC = () => {
     : voiceCatalog.elevenlabs;
 
   const currentSelectedVoiceObj = currentVoiceList.find((v) => v.id === selectedVoiceId);
+
+  // Contagem de palavras e estimativa de minutos de vídeo (~140 palavras/min em português)
+  const editedWordCount = useMemo(() => {
+    return (editedFullText || '').trim().split(/\s+/).filter(Boolean).length;
+  }, [editedFullText]);
+
+  const estimatedReadingMinutes = useMemo(() => {
+    if (editedWordCount === 0) return 0;
+    return Math.round((editedWordCount / 140) * 10) / 10;
+  }, [editedWordCount]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
@@ -1138,6 +1265,146 @@ export const NewsToVideoView: React.FC = () => {
 
             </div>
 
+            {/* 8. TIPO DE FORMATO DO VÍDEO (LIVE STREAMER, VOX MINI-DOC, NOTÍCIA ÁGIL TECH) */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <Clapperboard className="w-4 h-4 text-cyan-400" />
+                8. Tipo de Formato do Vídeo:
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* 1. Live Streamer Gamer */}
+                <button
+                  type="button"
+                  onClick={() => setVideoFormatType('live_streamer')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                    videoFormatType === 'live_streamer'
+                      ? 'bg-cyan-950/30 border-cyan-500 text-white shadow-md shadow-cyan-500/20 ring-1 ring-cyan-500/30'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-white flex items-center gap-1.5">
+                      🎮 Live Streamer Gamer
+                    </span>
+                    {videoFormatType === 'live_streamer' && (
+                      <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Linguagem em 1ª pessoa, tom empolgado e espontâneo com gameplay no fundo e avatar em webcam gamer.
+                  </p>
+                  <span className="text-[10px] text-cyan-400 font-mono">Ideal para games, CoD, lançamentos</span>
+                </button>
+
+                {/* 2. Estilo VOX / Mini-Doc */}
+                <button
+                  type="button"
+                  onClick={() => setVideoFormatType('vox_documentary')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                    videoFormatType === 'vox_documentary'
+                      ? 'bg-amber-950/30 border-amber-500 text-white shadow-md shadow-amber-500/20 ring-1 ring-amber-500/30'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-white flex items-center gap-1.5">
+                      🎬 Estilo VOX / Mini-Doc
+                    </span>
+                    {videoFormatType === 'vox_documentary' && (
+                      <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Cadência explicativa, transições analíticas investigativas com foco em detalhes e imagens oficiais.
+                  </p>
+                  <span className="text-[10px] text-amber-400 font-mono">Ideal para curiosidades e análises profundas</span>
+                </button>
+
+                {/* 3. Noticiário Ágil Tech */}
+                <button
+                  type="button"
+                  onClick={() => setVideoFormatType('tech_capsule')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                    videoFormatType === 'tech_capsule'
+                      ? 'bg-indigo-950/30 border-indigo-500 text-white shadow-md shadow-indigo-500/20 ring-1 ring-indigo-500/30'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-white flex items-center gap-1.5">
+                      ⚡ Noticiário Ágil Tech
+                    </span>
+                    {videoFormatType === 'tech_capsule' && (
+                      <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Direto ao ponto, ritmo acelerado, síntese dos pontos-chave com tópicos e números relevantes.
+                  </p>
+                  <span className="text-[10px] text-indigo-400 font-mono">Ideal para notícias rápidas e resumos diários</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 9. ENCERRAMENTO & CHAMADA PARA AÇÃO (CTA FINAL / LIKE / SEGUIR - PERSISTIDO NO SQLITE) */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <HeartHandshake className="w-4 h-4 text-emerald-400" />
+                  9. Encerramento & Chamada para Ação (CTA Final):
+                </label>
+
+                {/* Controles do Preset de Encerramento */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Preset Salvo:</span>
+                  <select
+                    value={selectedOutroPresetId}
+                    onChange={(e) => handleSelectOutroPreset(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    {outroPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.isDefault ? '⭐ [Padrão]' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrentOutroPreset}
+                    disabled={isSavingOutroPreset}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingOutroPreset ? 'Salvando...' : 'Salvar no Banco'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {outroSavedFeedback && (
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Preset de encerramento atualizado e salvo no SQLite com sucesso!</span>
+                </div>
+              )}
+
+              {/* Textarea editável para o texto do encerramento */}
+              <div className="space-y-1">
+                <textarea
+                  value={customOutroPhrase}
+                  onChange={(e) => setCustomOutroPhrase(e.target.value)}
+                  rows={2}
+                  placeholder="Texto falado no encerramento para pedir like, comentário e inscrição..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono resize-none"
+                />
+                <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
+                  <span>Este texto será narrado na cena final do vídeo antes do encerramento.</span>
+                  <span className="font-mono text-emerald-400/80">{customOutroPhrase.length} caracteres</span>
+                </div>
+              </div>
+            </div>
+
             {/* BOTÃO PRINCIPAL: RASPAR A NOTÍCIA */}
             <div className="pt-4 border-t border-slate-800">
               <button
@@ -1201,11 +1468,39 @@ export const NewsToVideoView: React.FC = () => {
 
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
-                  {(editedFullText || '').split(/\s+/).filter(Boolean).length} palavras
+                  {editedWordCount} palavras
                 </span>
                 <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
                   {(editedFullText || '').length} caracteres
                 </span>
+
+                {/* Estimativa de Tempo de Vídeo em Minutos */}
+                <span 
+                  title="Estimativa calculada com base no ritmo médio de locução humana (~140 palavras por minuto)"
+                  className="text-xs bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 px-2.5 py-1 rounded-lg font-mono font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>~{estimatedReadingMinutes} min de vídeo</span>
+                </span>
+
+                {/* Botão Humanizar com IA */}
+                <button
+                  type="button"
+                  onClick={handleHumanizeText}
+                  disabled={isHumanizingText || !editedFullText.trim()}
+                  title="Reescreve o texto com linguagem humana natural em 1ª pessoa no estilo selecionado, removendo tom de robô"
+                  className="px-3 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  <Wand2 className={`w-3.5 h-3.5 ${isHumanizingText ? 'animate-spin' : ''}`} />
+                  <span>{isHumanizingText ? 'Humanizando com IA...' : '✨ Humanizar Texto com IA'}</span>
+                </button>
+
+                {humanizeFeedback && (
+                  <span className="text-xs text-purple-300 bg-purple-950/60 border border-purple-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 animate-fadeIn">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+                    <span>{humanizeFeedback}</span>
+                  </span>
+                )}
 
                 {/* Botão para Restaurar Texto Completo Original */}
                 <button
@@ -1215,7 +1510,7 @@ export const NewsToVideoView: React.FC = () => {
                   className="px-3 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Restaurar Texto Completo Original</span>
+                  <span>Restaurar Original</span>
                 </button>
 
                 <button

@@ -27,6 +27,11 @@ dist-ssr
 storage/audio_samples/*
 storage/mp4/*
 storage/stills/*
+storage/api_keys.json
+storage/*.db
+storage/*.db-journal
+storage/news_cache/*
+storage/cod_page.html
 !storage/.gitkeep
 
 # Environment variables
