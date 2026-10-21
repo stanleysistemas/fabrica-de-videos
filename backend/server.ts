@@ -280,6 +280,17 @@ app.delete('/api/voice-studio/voices/:id', async (req: Request, res: Response) =
   }
 });
 
+// Endpoint: Catálogo Unificado de Vozes com Áudios de Amostra (VoiceStudio & ElevenLabs)
+app.get('/api/voices/catalog', async (req: Request, res: Response) => {
+  try {
+    const { voiceCatalogService } = await import('./services/voiceCatalogService');
+    const catalog = await voiceCatalogService.getCatalog();
+    res.json({ success: true, ...catalog });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao carregar catálogo de vozes' });
+  }
+});
+
 // Endpoint: Visão Multimodal de Vídeo (Assistir Referência do YouTube)
 app.post('/api/analyze-video', async (req: Request, res: Response) => {
   try {

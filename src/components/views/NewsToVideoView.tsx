@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { 
   Sparkles, Link, Check, RefreshCw, Copy, Search, 
   Gamepad2, Image as ImageIcon, Film, X, AlertTriangle, Key,
   Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
-  Upload, CheckCircle2, Video
+  Upload, CheckCircle2, Video, Play, Pause, Volume2, ShieldCheck,
+  Camera, Layers, Cpu
 } from 'lucide-react';
 
 interface ScrapedImage {
@@ -56,6 +57,17 @@ interface AvatarOption {
   type: 'setup_fullscreen' | 'webcam_corner' | 'custom';
 }
 
+interface VoiceItem {
+  id: string;
+  name: string;
+  engine: 'voicestudio_local' | 'elevenlabs';
+  categoryLabel: string;
+  tone: string;
+  description: string;
+  sampleAudioUrl: string;
+  isCustomCloned?: boolean;
+}
+
 export const NewsToVideoView: React.FC = () => {
   const { clonedVoices } = useSettingsStore();
 
@@ -69,23 +81,105 @@ export const NewsToVideoView: React.FC = () => {
   const [videoFormat, setVideoFormat] = useState<'horizontal' | 'vertical'>('horizontal'); // 16:9 ou 9:16
   const [targetDurationMinutes, setTargetDurationMinutes] = useState<number>(5); // 1, 3, 5, 10, 15 min
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>('avatar_stanley_setup');
-  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'studio_voice_neural' | 'eleven_labs'>('voicestudio_local');
+  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'elevenlabs'>('voicestudio_local');
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('voice_stanley_official');
   const [language, setLanguage] = useState<string>('pt-BR'); // pt-BR, en-US, es-ES
+  const [lipSyncEngine, setLipSyncEngine] = useState<'heygen' | 'latentsync'>('heygen');
+
+  // Catálogo de Vozes com Prévia de Áudio
+  const [voiceCatalog, setVoiceCatalog] = useState<{
+    voicestudio: VoiceItem[];
+    elevenlabs: VoiceItem[];
+  }>({
+    voicestudio: [
+      {
+        id: 'voice_stanley_official',
+        name: 'Minha Voz Oficial (Clonada - Stanley Alves)',
+        engine: 'voicestudio_local',
+        categoryLabel: 'VoiceStudio Local (Custo $0)',
+        tone: 'grave',
+        description: 'Voz personalizada com o bordão "Fala moçada! Segura o controle..." calibrada para games e tech.',
+        sampleAudioUrl: '',
+        isCustomCloned: true,
+      },
+      {
+        id: 'voice_vs_marcus',
+        name: 'Marcus Prime (Documentário)',
+        engine: 'voicestudio_local',
+        categoryLabel: 'VoiceStudio Local (Custo $0)',
+        tone: 'grave',
+        description: 'Voz profunda calibrada para autoridade, história e retenção narrativa estilo Vox.',
+        sampleAudioUrl: '',
+        isCustomCloned: false,
+      },
+      {
+        id: 'voice_vs_elena',
+        name: 'Elena Tech (Dinâmica)',
+        engine: 'voicestudio_local',
+        categoryLabel: 'VoiceStudio Local (Custo $0)',
+        tone: 'dinamico',
+        description: 'Entonação ágil e moderna ideal para canais dark de tecnologia, curiosidades e finanças.',
+        sampleAudioUrl: '',
+        isCustomCloned: false,
+      },
+    ],
+    elevenlabs: [
+      {
+        id: 'pNInz6obpgDQGcFmaJgB',
+        name: 'Adam (Profundo & Confiante)',
+        engine: 'elevenlabs',
+        categoryLabel: 'ElevenLabs Nuvem',
+        tone: 'grave',
+        description: 'Tom firme, confiante e cinematográfico. Excelente para narração épica e tech.',
+        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/pNInz6obpgDQGcFmaJgB/sample.mp3',
+      },
+      {
+        id: 'ErXwobaYiN019PkySvjV',
+        name: 'Antoni (Gamer & Dinâmico)',
+        engine: 'elevenlabs',
+        categoryLabel: 'ElevenLabs Nuvem',
+        tone: 'dinamico',
+        description: 'Ritmo enérgico, dicção clara e casual. Perfeito para notícias de games e lives.',
+        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/ErXwobaYiN019PkySvjV/sample.mp3',
+      },
+      {
+        id: '21m00Tcm4TlvDq8ikWAM',
+        name: 'Rachel (Noticiosa & Calma)',
+        engine: 'elevenlabs',
+        categoryLabel: 'ElevenLabs Nuvem',
+        tone: 'suave',
+        description: 'Voz feminina clara e profissional, padrão de telejornais e reportagens.',
+        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/21m00Tcm4TlvDq8ikWAM/sample.mp3',
+      },
+      {
+        id: 'onwK4e9ZLuTAKqWW03F9',
+        name: 'Daniel (Documentário Sério)',
+        engine: 'elevenlabs',
+        categoryLabel: 'ElevenLabs Nuvem',
+        tone: 'grave',
+        description: 'Voz madura e detalhista para dossiês e matérias investigativas.',
+        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/onwK4e9ZLuTAKqWW03F9/sample.mp3',
+      },
+    ],
+  });
+
+  // Player de Áudio de Teste
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   // Lista de Avatares Cadastrados
   const [avatarsList, setAvatarsList] = useState<AvatarOption[]>([
     {
       id: 'avatar_stanley_setup',
       name: 'Stanley Alves (Estúdio Gamer Completo)',
-      description: 'Ideal para abertura em tela cheia com iluminação RGB e setup gamer.',
+      description: 'Câmera Inteligente: Tela cheia na abertura (0-8s) ➔ Webcam no canto com borda neon.',
       imageUrl: 'http://localhost:3001/storage/avatars/avatar_stanley_setup.jpg',
       type: 'setup_fullscreen',
     },
     {
       id: 'avatar_stanley_webcam',
       name: 'Stanley Alves (Webcam Gamer Close-Up)',
-      description: 'Ideal para ficar no canto da tela comentando por cima do gameplay e fotos.',
+      description: 'Close-up direto com microfone e iluminação profissional de streamer.',
       imageUrl: 'http://localhost:3001/storage/avatars/avatar_stanley_webcam.jpg',
       type: 'webcam_corner',
     },
@@ -125,20 +219,90 @@ export const NewsToVideoView: React.FC = () => {
   const [isSavingKeys, setIsSavingKeys] = useState(false);
   const [saveKeysSuccess, setSaveKeysSuccess] = useState(false);
 
-  // Carregar status das chaves de API
+  // Carregar status das chaves de API e catálogo de vozes
   useEffect(() => {
+    // 1. Chaves de API
     fetch('http://localhost:3001/api/stock-videos/keys')
       .then((r) => r.json())
       .then((data) => {
         if (data.success) {
           setApiKeysStatus(data);
-          if (data.keys) {
-            setFormKeys(data.keys);
-          }
+          if (data.keys) setFormKeys(data.keys);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Catálogo de vozes
+    fetch('http://localhost:3001/api/voices/catalog')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          setVoiceCatalog({
+            voicestudio: data.voicestudio || [],
+            elevenlabs: data.elevenlabs || [],
+          });
         }
       })
       .catch(() => {});
   }, []);
+
+  // Tocar / Pausar Áudio de Demonstração de Voz
+  const handleTogglePlayVoice = (voice: VoiceItem) => {
+    // Se já estiver tocando essa voz, pausa
+    if (playingVoiceId === voice.id) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setPlayingVoiceId(null);
+      return;
+    }
+
+    // Se tiver URL de áudio MP3 (ElevenLabs ou VoiceStudio gravado)
+    if (voice.sampleAudioUrl && voice.sampleAudioUrl.startsWith('http')) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      const audio = new Audio(voice.sampleAudioUrl);
+      audioPlayerRef.current = audio;
+      audio.onended = () => setPlayingVoiceId(null);
+      audio.onerror = () => {
+        // Fallback para síntese de voz nativa caso o link falhe
+        speakNativeSample(voice);
+      };
+      audio.play().then(() => {
+        setPlayingVoiceId(voice.id);
+      }).catch(() => {
+        speakNativeSample(voice);
+      });
+    } else {
+      // Síntese nativa em português com o bordão
+      speakNativeSample(voice);
+    }
+  };
+
+  // Síntese de fala de demonstração (fallback ou teste instantâneo)
+  const speakNativeSample = (voice: VoiceItem) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const phrase = voice.id === 'voice_stanley_official' 
+        ? 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo!'
+        : `Olá! Esta é uma demonstração da voz ${voice.name} para o seu vídeo.`;
+
+      const utterance = new SpeechSynthesisUtterance(phrase);
+      utterance.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US';
+      utterance.pitch = voice.tone === 'grave' ? 0.85 : voice.tone === 'dinamico' ? 1.15 : 1.0;
+      utterance.rate = voice.tone === 'dinamico' ? 1.1 : 0.95;
+
+      utterance.onend = () => setPlayingVoiceId(null);
+      utterance.onerror = () => setPlayingVoiceId(null);
+
+      setPlayingVoiceId(voice.id);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   // Salvar chaves de API
   const handleSaveApiKeys = async () => {
@@ -206,7 +370,6 @@ export const NewsToVideoView: React.FC = () => {
   const handleScrapeNews = async () => {
     if (!url.trim()) return;
 
-    // Regra Obrigatória: se não tiver nenhum avatar selecionado/cadastrado, pedir para criar/selecionar
     if (!selectedAvatarId || avatarsList.length === 0) {
       setAvatarErrorAlert(true);
       setShowAvatarModal(true);
@@ -226,6 +389,7 @@ export const NewsToVideoView: React.FC = () => {
           targetDurationMinutes,
           brollChannel: brollVideoSource,
           themeFocus: 'all',
+          lipSyncEngine,
         }),
       });
 
@@ -234,7 +398,6 @@ export const NewsToVideoView: React.FC = () => {
         if (data.success && data.article) {
           setArticle(data.article);
           setSelectedImageIds(data.article.images.map((img: ScrapedImage) => img.id));
-          // Avança para a Tela 2
           setCurrentScreen(2);
         }
       } else {
@@ -273,7 +436,6 @@ export const NewsToVideoView: React.FC = () => {
     setTimeout(() => setCopiedRawText(false), 2000);
   };
 
-  // Filtragem do texto bruto para busca
   const filteredRawText = article?.fullText
     ? rawTextSearch.trim()
       ? article.fullText
@@ -282,6 +444,11 @@ export const NewsToVideoView: React.FC = () => {
           .join('\n')
       : article.fullText
     : '';
+
+  // Lista de vozes ativas conforme o motor selecionado
+  const currentVoiceList = voiceEngine === 'voicestudio_local' 
+    ? voiceCatalog.voicestudio 
+    : voiceCatalog.elevenlabs;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
@@ -298,7 +465,7 @@ export const NewsToVideoView: React.FC = () => {
           </div>
           <p className="text-xs text-slate-400">
             {currentScreen === 1 
-              ? 'Tela 1: Configuração da Notícia, Formato, Duração, Avatar e Voz' 
+              ? 'Tela 1: Configuração da Notícia, Formato, Duração, Avatar, Voz e Lip-Sync' 
               : 'Tela 2: Texto Capturado, Mídias da Notícia e Seleção de Vídeo de Fundo'}
           </p>
         </div>
@@ -339,7 +506,7 @@ export const NewsToVideoView: React.FC = () => {
           </div>
           <div>
             <div className="text-xs font-extrabold text-white">Tela 1: Configuração Prévia</div>
-            <div className="text-[11px] text-slate-400">Site, Formato, Tempo, Avatar, Voz e Idioma</div>
+            <div className="text-[11px] text-slate-400">Site, Formato, Tempo, Avatar, Voz e Lip-Sync</div>
           </div>
         </button>
 
@@ -375,7 +542,6 @@ export const NewsToVideoView: React.FC = () => {
       {/* ========================================================================= */}
       {currentScreen === 1 && (
         <div className="space-y-6 animate-fadeIn">
-          {/* CARD PRINCIPAL DA TELA 1 */}
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
             
             {/* 1. ESCOLHER O SITE / URL DA NOTÍCIA */}
@@ -497,12 +663,12 @@ export const NewsToVideoView: React.FC = () => {
               </div>
             </div>
 
-            {/* 4. ESCOLHER AVATAR QUE IREMOS USAR (COM VALIDAÇÃO E PEDIDO PARA CRIAR SE NÃO TIVER) */}
+            {/* 4. ESCOLHER AVATAR QUE IREMOS USAR (COM REGRA DE CÂMERA DO STANLEY) */}
             <div className="space-y-3 pt-4 border-t border-slate-800">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <User className="w-4 h-4 text-amber-400" />
-                  4. Avatar que Iremos Usar:
+                  4. Avatar do Apresentador:
                 </label>
                 <button
                   type="button"
@@ -512,6 +678,14 @@ export const NewsToVideoView: React.FC = () => {
                   <Upload className="w-3.5 h-3.5" />
                   <span>+ Cadastrar Novo Avatar</span>
                 </button>
+              </div>
+
+              {/* CARD DE INFORMAÇÃO DA REGRA DE CÂMERA DO STANLEY */}
+              <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-start gap-2.5 text-xs">
+                <Camera className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-slate-300">
+                  <span className="font-bold text-amber-300">Direção de Câmera Oficial:</span> Abertura em <strong>Tela Cheia no Estúdio Gamer</strong> (0 a 8s com o bordão) ➔ A partir da 2ª cena, o avatar reduz automaticamente para o <strong>quadro de webcam gamer no canto da tela</strong> com moldura e ondas sonoras, sem cobrir o vídeo de fundo nem as fotos da notícia.
+                </div>
               </div>
 
               {/* Grid de Avatares Cadastrados */}
@@ -546,74 +720,125 @@ export const NewsToVideoView: React.FC = () => {
               </div>
             </div>
 
-            {/* 5. VOZ QUE SERÁ USADA (CLONADA LOCAL, STUDIO VOICE, ELEVEN LABS) & 6. IDIOMA */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              {/* Voz */}
-              <div className="space-y-2">
+            {/* 5. VOZ QUE SERÁ USADA COM PLAYER PARA ESCUTAR E TESTAR */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <Mic className="w-4 h-4 text-rose-400" />
-                  5. Voz que Será Usada:
+                  5. Voz que Será Usada (Escute e Teste Antes de Escolher):
                 </label>
-
-                {/* Seleção de Motor de Voz */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVoiceEngine('voicestudio_local')}
-                    className={`p-2 rounded-xl border text-center transition-all ${
-                      voiceEngine === 'voicestudio_local'
-                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px] font-bold">Voz Clonada</div>
-                    <div className="text-[9px] text-slate-400">VoiceStudio Local</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setVoiceEngine('studio_voice_neural')}
-                    className={`p-2 rounded-xl border text-center transition-all ${
-                      voiceEngine === 'studio_voice_neural'
-                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px] font-bold">Studio Voice</div>
-                    <div className="text-[9px] text-slate-400">Neural HD</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setVoiceEngine('eleven_labs')}
-                    className={`p-2 rounded-xl border text-center transition-all ${
-                      voiceEngine === 'eleven_labs'
-                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px] font-bold">ElevenLabs</div>
-                    <div className="text-[9px] text-slate-400">API Nuvem</div>
-                  </button>
-                </div>
-
-                {/* Dropdown de Vozes */}
-                <select
-                  value={selectedVoiceId}
-                  onChange={(e) => setSelectedVoiceId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
-                >
-                  <option value="voice_stanley_official">Minha Voz Oficial (Clonada - Stanley Alves)</option>
-                  {clonedVoices.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.engine})
-                    </option>
-                  ))}
-                  <option value="voice_doc_dark">Narrador Sombrio (Estilo VOX)</option>
-                  <option value="voice_viral_energetic">Locutor Viral (Shorts / Alta Energia)</option>
-                </select>
+                <span className="text-[11px] text-slate-400">
+                  Clique no play para ouvir a entonação da voz!
+                </span>
               </div>
 
+              {/* Seleção de Motor de Voz */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setVoiceEngine('voicestudio_local')}
+                  className={`p-3 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                    voiceEngine === 'voicestudio_local'
+                      ? 'bg-rose-600/20 border-rose-500 text-white shadow-md shadow-rose-500/20'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Cpu className={`w-5 h-5 ${voiceEngine === 'voicestudio_local' ? 'text-rose-400' : 'text-slate-500'}`} />
+                  <div>
+                    <div className="text-xs font-extrabold">Voz Clonada Local (VoiceStudio)</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Roda no seu PC (Intel i5-13500) • Custo R$ 0,00</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setVoiceEngine('elevenlabs')}
+                  className={`p-3 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                    voiceEngine === 'elevenlabs'
+                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-500/20'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Sparkles className={`w-5 h-5 ${voiceEngine === 'elevenlabs' ? 'text-purple-400' : 'text-slate-500'}`} />
+                  <div>
+                    <div className="text-xs font-extrabold">ElevenLabs (API Nuvem)</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Vozes consagradas e ultra realistas de estúdio</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* LISTA DE VOZES COM PLAYER PARA OUVIR E TESTAR CADA UMA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {currentVoiceList.map((v) => {
+                  const isSelected = selectedVoiceId === v.id;
+                  const isPlaying = playingVoiceId === v.id;
+
+                  return (
+                    <div
+                      key={v.id}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-slate-950 border-rose-500 ring-1 ring-rose-500/40 shadow-lg shadow-rose-950/20'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-white truncate">{v.name}</span>
+                            {v.isCustomCloned && (
+                              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
+                                Stanley Oficial
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">{v.description}</p>
+                        </div>
+
+                        {/* Botão de Play / Ouvir Amostra */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePlayVoice(v);
+                          }}
+                          className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                            isPlaying
+                              ? 'bg-rose-500 text-white animate-pulse'
+                              : 'bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white'
+                          }`}
+                          title={isPlaying ? 'Pausar áudio' : 'Ouvir amostra de voz'}
+                        >
+                          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-850">
+                        <span className="text-[10px] text-slate-400 font-mono uppercase">
+                          Tom: <strong className="text-slate-300">{v.tone}</strong>
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVoiceId(v.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            isSelected
+                              ? 'bg-rose-600 text-white shadow-sm'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          {isSelected ? '✓ Selecionada' : 'Usar Esta Voz'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 6. IDIOMA DO VÍDEO & 7. MOTOR DE LIP-SYNC DO AVATAR */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              
               {/* Idioma do Vídeo */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
@@ -643,6 +868,59 @@ export const NewsToVideoView: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* 7. MOTOR DE LIP-SYNC (HEYGEN VS LATENTSYNC) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Video className="w-4 h-4 text-indigo-400" />
+                  7. Motor de Lip-Sync (Sincronia Labial):
+                </label>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* HeyGen API */}
+                  <button
+                    type="button"
+                    onClick={() => setLipSyncEngine('heygen')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      lipSyncEngine === 'heygen'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-white">HeyGen API</span>
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-semibold">
+                        Recomendado
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                      Talking Photo de estúdio (idêntico ao gerado em teste).
+                    </div>
+                  </button>
+
+                  {/* Replicate LatentSync */}
+                  <button
+                    type="button"
+                    onClick={() => setLipSyncEngine('latentsync')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      lipSyncEngine === 'latentsync'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-white">LatentSync</span>
+                      <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-semibold">
+                        ByteDance
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                      Difusão latente U-Net 512x512 via Replicate A100.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
             </div>
 
             {/* BOTÃO PRINCIPAL: RASPAR A NOTÍCIA */}
@@ -651,7 +929,7 @@ export const NewsToVideoView: React.FC = () => {
                 type="button"
                 onClick={handleScrapeNews}
                 disabled={isLoadingScrape || !url.trim()}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
               >
                 {isLoadingScrape ? (
                   <>
@@ -682,7 +960,7 @@ export const NewsToVideoView: React.FC = () => {
             <button
               type="button"
               onClick={() => setCurrentScreen(1)}
-              className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all"
+              className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>← Voltar para Configurações (Tela 1)</span>
@@ -714,7 +992,7 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCopyRawText}
-                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Copy className="w-3.5 h-3.5 text-indigo-400" />
                   <span>{copiedRawText ? 'Copiado!' : 'Copiar Texto'}</span>
@@ -757,7 +1035,7 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSelectAllImages(true)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer"
                 >
                   Selecionar Todas
                 </button>
@@ -765,7 +1043,7 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSelectAllImages(false)}
-                  className="text-xs text-slate-400 hover:text-slate-300 font-bold"
+                  className="text-xs text-slate-400 hover:text-slate-300 font-bold cursor-pointer"
                 >
                   Desmarcar Todas
                 </button>
@@ -829,7 +1107,7 @@ export const NewsToVideoView: React.FC = () => {
                   setShowStockModal(true);
                   handleSearchStockVideos();
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/30 shrink-0"
+                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/30 shrink-0 cursor-pointer"
               >
                 <Film className="w-3.5 h-3.5" />
                 <span>Buscar Vídeo Grátis (Pexels / Pixabay)</span>
@@ -852,7 +1130,7 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setBrollVideoSource('@stanleyalvesbr')}
-                  className="px-3 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold whitespace-nowrap"
+                  className="px-3 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold whitespace-nowrap cursor-pointer"
                 >
                   Usar Meu Canal (@stanleyalvesbr)
                 </button>
@@ -874,7 +1152,7 @@ export const NewsToVideoView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedStockVideo(null)}
-                    className="text-slate-400 hover:text-white"
+                    className="text-slate-400 hover:text-white cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -883,7 +1161,7 @@ export const NewsToVideoView: React.FC = () => {
             </div>
           </div>
 
-          {/* BOX DE CONCLUSÃO DA ETAPA ATÉ AQUI (AGUARDANDO PRÓXIMAS INSTRUÇÕES DO STANLEY) */}
+          {/* BOX DE CONCLUSÃO DA ETAPA */}
           <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-indigo-500/30 flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
@@ -919,7 +1197,7 @@ export const NewsToVideoView: React.FC = () => {
                   setShowAvatarModal(false);
                   setAvatarErrorAlert(false);
                 }}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -963,13 +1241,13 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAvatarModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-md shadow-amber-600/30"
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-md shadow-amber-600/30 cursor-pointer"
                 >
                   Salvar e Selecionar
                 </button>
@@ -993,7 +1271,7 @@ export const NewsToVideoView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowStockModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1012,7 +1290,7 @@ export const NewsToVideoView: React.FC = () => {
                 type="button"
                 onClick={handleSearchStockVideos}
                 disabled={isSearchingStock}
-                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5"
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
               >
                 {isSearchingStock ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                 <span>Buscar</span>
@@ -1053,7 +1331,7 @@ export const NewsToVideoView: React.FC = () => {
                         setBrollVideoSource(vid.videoUrl);
                         setShowStockModal(false);
                       }}
-                      className="mt-2 w-full py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 hover:border-purple-500 text-[11px] font-bold text-purple-300 hover:text-white transition-all"
+                      className="mt-2 w-full py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 hover:border-purple-500 text-[11px] font-bold text-purple-300 hover:text-white transition-all cursor-pointer"
                     >
                       Usar Este Vídeo de Fundo
                     </button>
@@ -1079,7 +1357,7 @@ export const NewsToVideoView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowApiKeysModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1137,7 +1415,7 @@ export const NewsToVideoView: React.FC = () => {
 
               <div>
                 <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
-                  <span>HeyGen API Key (Talking Head Lip-Sync):</span>
+                  <span>HeyGen API Key (Talking Photo Lip-Sync):</span>
                   <a
                     href="https://app.heygen.com/settings?nav=API"
                     target="_blank"
@@ -1182,7 +1460,7 @@ export const NewsToVideoView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowApiKeysModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
               >
                 Fechar
               </button>
@@ -1190,7 +1468,7 @@ export const NewsToVideoView: React.FC = () => {
                 type="button"
                 onClick={handleSaveApiKeys}
                 disabled={isSavingKeys}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer"
               >
                 {isSavingKeys && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>Salvar Configurações</span>
