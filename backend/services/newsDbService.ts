@@ -76,6 +76,15 @@ class NewsDbService {
         created_at TEXT NOT NULL,
         FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS intro_presets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        hook_phrase TEXT NOT NULL,
+        reading_guide TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -213,6 +222,102 @@ class NewsDbService {
       })),
     };
   }
+
+  public getIntroPresets(): IntroPreset[] {
+    const rows = this.db.prepare(`SELECT * FROM intro_presets ORDER BY is_default DESC, name ASC`).all() as any[];
+    if (rows.length === 0) {
+      this.seedDefaultPresets();
+      return this.getIntroPresets();
+    }
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      hookPhrase: r.hook_phrase,
+      readingGuide: r.reading_guide,
+      isDefault: r.is_default === 1,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  public saveIntroPreset(preset: {
+    id?: string;
+    name: string;
+    hookPhrase: string;
+    readingGuide: string;
+    isDefault?: boolean;
+  }): IntroPreset {
+    const id = preset.id || `preset_${Date.now()}`;
+    const updatedAt = new Date().toISOString();
+    const isDefaultVal = preset.isDefault ? 1 : 0;
+
+    if (preset.isDefault) {
+      this.db.prepare(`UPDATE intro_presets SET is_default = 0`).run();
+    }
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO intro_presets (id, name, hook_phrase, reading_guide, is_default, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, preset.name, preset.hookPhrase, preset.readingGuide, isDefaultVal, updatedAt);
+
+    return {
+      id,
+      name: preset.name,
+      hookPhrase: preset.hookPhrase,
+      readingGuide: preset.readingGuide,
+      isDefault: Boolean(preset.isDefault),
+      updatedAt,
+    };
+  }
+
+  public deleteIntroPreset(id: string): boolean {
+    const res = this.db.prepare(`DELETE FROM intro_presets WHERE id = ?`).run(id);
+    return (res as any).changes > 0;
+  }
+
+  private seedDefaultPresets() {
+    const defaults = [
+      {
+        id: 'preset_gamer',
+        name: 'Gamer / Streamer (Stanley Alves)',
+        hookPhrase: 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo...',
+        readingGuide: 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento. Preste bastante atenção em cada detalhe, porque a jogabilidade mudou completamente. Não se esqueça de deixar o seu like e se inscrever no canal para não perder nenhum conteúdo exclusivo!',
+        isDefault: 1,
+      },
+      {
+        id: 'preset_noticia',
+        name: 'Notícia / Jornalismo / Geral',
+        hookPhrase: 'Atenção! Principais destaques e atualizações urgentes de hoje...',
+        readingGuide: 'Olá a todos! Sejam muito bem-vindos ao nosso boletim de notícias. Hoje nós trazemos as apurações exclusivas, os fatos mais relevantes e os desdobramentos oficiais dessa matéria. Acompanhe a nossa análise detalhada até o final e deixe a sua opinião nos comentários!',
+        isDefault: 0,
+      },
+      {
+        id: 'preset_politica_tech',
+        name: 'Opinião / Política / Tech',
+        hookPhrase: 'Fala pessoal! Hoje vamos analisar os bastidores e o que ninguém te contou sobre isso...',
+        readingGuide: 'Sejam todos muito bem-vindos! No vídeo de hoje nós vamos dissecar os bastidores, as decisões que estão em jogo e como essa pauta impacta diretamente o seu dia a dia. Compartilhe esse vídeo com seus amigos e participe da discussão!',
+        isDefault: 0,
+      },
+    ];
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO intro_presets (id, name, hook_phrase, reading_guide, is_default, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+    for (const d of defaults) {
+      stmt.run(d.id, d.name, d.hookPhrase, d.readingGuide, d.isDefault, now);
+    }
+  }
+}
+
+export interface IntroPreset {
+  id: string;
+  name: string;
+  hookPhrase: string;
+  readingGuide: string;
+  isDefault: boolean;
+  updatedAt: string;
 }
 
 export const newsDbService = new NewsDbService();

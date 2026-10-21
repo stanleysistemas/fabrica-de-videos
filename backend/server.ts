@@ -10,6 +10,7 @@ import { hardwareService } from './services/hardwareService';
 import { voiceStudioService } from './services/voiceStudioService';
 import { newsScraperService } from './services/newsScraperService';
 import { newsDirectorService } from './services/newsDirectorService';
+import { newsDbService } from './services/newsDbService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,7 +44,17 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Endpoint: Scrape de Matéria de Blog / Notícia e Geração de Roteiro
 app.post('/api/news/scrape', async (req: Request, res: Response) => {
   try {
-    const { url, styleMode, targetDurationMinutes, brollChannel, themeFocus, customPrompt } = req.body;
+    const {
+      url,
+      styleMode,
+      targetDurationMinutes,
+      brollChannel,
+      themeFocus,
+      customPrompt,
+      customHookHeading,
+      customHookNarration,
+      editedFullText,
+    } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL da matéria é obrigatória' });
     }
@@ -56,6 +67,9 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
       styleMode: styleMode || 'gamer_streamer',
       targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
       brollChannel: brollChannel || '@stanleyalvesbr',
+      customHookHeading,
+      customHookNarration,
+      editedFullText,
     });
 
     res.json({ success: true, article, plan });
@@ -67,7 +81,18 @@ app.post('/api/news/scrape', async (req: Request, res: Response) => {
 // Endpoint: Gerar Novo Roteiro com Foco Temático sem Raspar Novamente
 app.post('/api/news/generate-plan', async (req: Request, res: Response) => {
   try {
-    const { article, themeFocus, customPrompt, styleMode, selectedImageIds, targetDurationMinutes, brollChannel } = req.body;
+    const {
+      article,
+      themeFocus,
+      customPrompt,
+      styleMode,
+      selectedImageIds,
+      targetDurationMinutes,
+      brollChannel,
+      customHookHeading,
+      customHookNarration,
+      editedFullText,
+    } = req.body;
     if (!article) {
       return res.status(400).json({ error: 'Dados do artigo são obrigatórios' });
     }
@@ -80,11 +105,57 @@ app.post('/api/news/generate-plan', async (req: Request, res: Response) => {
       selectedImageIds,
       targetDurationMinutes: targetDurationMinutes ? Number(targetDurationMinutes) : 5,
       brollChannel: brollChannel || '@stanleyalvesbr',
+      customHookHeading,
+      customHookNarration,
+      editedFullText,
     });
 
     res.json({ success: true, plan });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Falha ao gerar plano temático' });
+  }
+});
+
+// Endpoint: Listar Presets de Bordão & Abertura Salvos no SQLite
+app.get('/api/settings/intro-presets', (req: Request, res: Response) => {
+  try {
+    const presets = newsDbService.getIntroPresets();
+    res.json({ success: true, presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao consultar presets de abertura' });
+  }
+});
+
+// Endpoint: Salvar/Atualizar Preset de Bordão & Abertura no SQLite
+app.post('/api/settings/intro-presets', (req: Request, res: Response) => {
+  try {
+    const { id, name, hookPhrase, readingGuide, isDefault } = req.body;
+    if (!name || !hookPhrase) {
+      return res.status(400).json({ error: 'Nome e frase de gancho são obrigatórios' });
+    }
+    const saved = newsDbService.saveIntroPreset({
+      id,
+      name,
+      hookPhrase,
+      readingGuide: readingGuide || hookPhrase,
+      isDefault: Boolean(isDefault),
+    });
+    const presets = newsDbService.getIntroPresets();
+    res.json({ success: true, message: 'Preset salvo com sucesso!', preset: saved, presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao salvar preset de abertura' });
+  }
+});
+
+// Endpoint: Excluir Preset de Bordão & Abertura do SQLite
+app.delete('/api/settings/intro-presets/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    newsDbService.deleteIntroPreset(id);
+    const presets = newsDbService.getIntroPresets();
+    res.json({ success: true, message: 'Preset removido com sucesso!', presets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao excluir preset de abertura' });
   }
 });
 

@@ -1,11 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Sparkles, Link, Check, RefreshCw, Copy, Search, 
   Gamepad2, Image as ImageIcon, Film, X, AlertTriangle,
   Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
   Upload, CheckCircle2, Video, Play, Pause, Square, Volume2, Camera,
-  Radio
+  Radio, RotateCcw, Save, Filter
 } from 'lucide-react';
+
+export interface IntroPreset {
+  id: string;
+  name: string;
+  hookPhrase: string;
+  readingGuide: string;
+  isDefault: boolean;
+  updatedAt?: string;
+}
 
 interface ScrapedImage {
   id: string;
@@ -143,6 +152,17 @@ export const NewsToVideoView: React.FC = () => {
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [rawTextSearch, setRawTextSearch] = useState('');
   const [copiedRawText, setCopiedRawText] = useState(false);
+  const [editedFullText, setEditedFullText] = useState<string>('');
+
+  // Presets de Bordão & Abertura (Persistidos no SQLite)
+  const [introPresets, setIntroPresets] = useState<IntroPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('preset_gamer');
+  const [customHookPhrase, setCustomHookPhrase] = useState<string>('Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo...');
+  const [customReadingGuide, setCustomReadingGuide] = useState<string>('Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento...');
+  const [isSavingPreset, setIsSavingPreset] = useState(false);
+  const [presetSavedFeedback, setPresetSavedFeedback] = useState(false);
+  const [showNewPresetModal, setShowNewPresetModal] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
 
   // Vídeo de Fundo Contínuo (B-Roll)
   const [brollVideoSource, setBrollVideoSource] = useState<string>('@stanleyalvesbr');
@@ -153,6 +173,99 @@ export const NewsToVideoView: React.FC = () => {
   const [stockSearchQuery, setStockSearchQuery] = useState('gameplay 4k');
   const [isSearchingStock, setIsSearchingStock] = useState(false);
   const [stockVideos, setStockVideos] = useState<StockVideoItem[]>([]);
+
+  // Carregar presets de abertura do SQLite
+  const loadIntroPresets = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/settings/intro-presets');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.presets && data.presets.length > 0) {
+          setIntroPresets(data.presets);
+          const defaultPreset = data.presets.find((p: IntroPreset) => p.isDefault) || data.presets[0];
+          setSelectedPresetId(defaultPreset.id);
+          setCustomHookPhrase(defaultPreset.hookPhrase);
+          setCustomReadingGuide(defaultPreset.readingGuide);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar presets de abertura:', err);
+    }
+  };
+
+  const handleSelectPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const p = introPresets.find((x) => x.id === presetId);
+    if (p) {
+      setCustomHookPhrase(p.hookPhrase);
+      setCustomReadingGuide(p.readingGuide);
+    }
+  };
+
+  const handleSaveCurrentPreset = async () => {
+    if (!customHookPhrase.trim()) {
+      alert('Informe a frase de abertura/gancho.');
+      return;
+    }
+    setIsSavingPreset(true);
+    try {
+      const current = introPresets.find((p) => p.id === selectedPresetId);
+      const res = await fetch('http://localhost:3001/api/settings/intro-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedPresetId,
+          name: current?.name || 'Preset Personalizado',
+          hookPhrase: customHookPhrase.trim(),
+          readingGuide: customReadingGuide.trim() || customHookPhrase.trim(),
+          isDefault: true,
+        }),
+      });
+      if (res.ok) {
+        setPresetSavedFeedback(true);
+        setTimeout(() => setPresetSavedFeedback(false), 2500);
+        await loadIntroPresets();
+      }
+    } catch (err) {
+      console.error('Erro ao salvar preset:', err);
+      alert('Erro ao salvar preset no banco.');
+    } finally {
+      setIsSavingPreset(false);
+    }
+  };
+
+  const handleCreateNewPreset = async () => {
+    if (!newPresetName.trim() || !customHookPhrase.trim()) {
+      alert('Informe o nome do preset e a frase de abertura.');
+      return;
+    }
+    setIsSavingPreset(true);
+    try {
+      const res = await fetch('http://localhost:3001/api/settings/intro-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newPresetName.trim(),
+          hookPhrase: customHookPhrase.trim(),
+          readingGuide: customReadingGuide.trim() || customHookPhrase.trim(),
+          isDefault: false,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await loadIntroPresets();
+        if (data.preset?.id) {
+          setSelectedPresetId(data.preset.id);
+        }
+        setShowNewPresetModal(false);
+        setNewPresetName('');
+      }
+    } catch (err) {
+      console.error('Erro ao criar preset:', err);
+    } finally {
+      setIsSavingPreset(false);
+    }
+  };
 
   // Carregar catálogo real de vozes
   const loadVoices = async () => {
@@ -184,6 +297,7 @@ export const NewsToVideoView: React.FC = () => {
 
   useEffect(() => {
     loadVoices();
+    loadIntroPresets();
   }, []);
 
   // Quando troca o motor de voz (VoiceStudio vs ElevenLabs), atualiza a voz selecionada
@@ -386,6 +500,7 @@ export const NewsToVideoView: React.FC = () => {
     setAvatarErrorAlert(false);
 
     try {
+      const activePreset = introPresets.find((p) => p.id === selectedPresetId);
       const res = await fetch('http://localhost:3001/api/news/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -398,6 +513,8 @@ export const NewsToVideoView: React.FC = () => {
           lipSyncEngine,
           voiceEngine,
           selectedVoiceId,
+          customHookHeading: activePreset?.name || 'BOMBA: NOTÍCIA OFICIAL',
+          customHookNarration: customHookPhrase,
         }),
       });
 
@@ -405,6 +522,7 @@ export const NewsToVideoView: React.FC = () => {
         const data = await res.json();
         if (data.success && data.article) {
           setArticle(data.article);
+          setEditedFullText(data.article.fullText || '');
           setSelectedImageIds(data.article.images.map((img: ScrapedImage) => img.id));
           setCurrentScreen(2);
         }
@@ -436,22 +554,60 @@ export const NewsToVideoView: React.FC = () => {
     }
   };
 
-  // Copiar texto bruto da matéria
+  // Copiar texto da matéria (copia o texto atualmente editado)
   const handleCopyRawText = () => {
-    if (!article?.fullText) return;
-    navigator.clipboard.writeText(article.fullText);
+    const textToCopy = editedFullText || article?.fullText || '';
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedRawText(true);
     setTimeout(() => setCopiedRawText(false), 2000);
   };
 
-  const filteredRawText = article?.fullText
-    ? rawTextSearch.trim()
-      ? article.fullText
-          .split('\n')
-          .filter((line) => line.toLowerCase().includes(rawTextSearch.toLowerCase()))
-          .join('\n')
-      : article.fullText
-    : '';
+  // Restaurar Texto Original Completo
+  const handleRestoreOriginalText = () => {
+    if (article?.fullText) {
+      setEditedFullText(article.fullText);
+      setRawTextSearch('');
+    }
+  };
+
+  // Filtrar apenas parágrafos do texto original que contêm o termo pesquisado
+  const handleFilterParagraphsBySearch = () => {
+    if (!rawTextSearch.trim() || !article?.fullText) return;
+    const term = rawTextSearch.toLowerCase().trim();
+    const allParagraphs = article.fullText.split(/\n\s*\n|\n/);
+    const matched = allParagraphs
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && p.toLowerCase().includes(term));
+
+    if (matched.length > 0) {
+      setEditedFullText(matched.join('\n\n'));
+    } else {
+      alert(`Nenhum parágrafo encontrado contendo "${rawTextSearch}".`);
+    }
+  };
+
+  // Contagem de ocorrências do termo de busca no texto editado
+  const matchCount = useMemo(() => {
+    if (!rawTextSearch.trim()) return 0;
+    const text = editedFullText || article?.fullText || '';
+    if (!text) return 0;
+    try {
+      const escaped = rawTextSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'gi');
+      const matches = text.match(regex);
+      return matches ? matches.length : 0;
+    } catch {
+      return 0;
+    }
+  }, [rawTextSearch, editedFullText, article]);
+
+  // Se o usuário já tiver raspado a matéria e editedFullText estiver vazio, inicializa
+  useEffect(() => {
+    if (article?.fullText && !editedFullText) {
+      setEditedFullText(article.fullText);
+    }
+  }, [article]);
 
   // Lista de vozes ativas do motor selecionado
   const currentVoiceList = voiceEngine === 'voicestudio_local' 
@@ -480,11 +636,14 @@ export const NewsToVideoView: React.FC = () => {
           </p>
         </div>
 
-        {/* BORDÃO OFICIAL CRAVADO */}
+        {/* PRESET ATIVO NO CABEÇALHO */}
         <div className="flex items-center gap-2">
-          <div className="px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2 shadow-sm">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Bordão Cravado: "Fala moçada! Segura o controle..."</span>
+          <div className="px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 font-bold flex items-center gap-2 shadow-sm">
+            <Radio className="w-3.5 h-3.5 text-rose-400" />
+            <span>Preset:</span>
+            <span className="text-white font-mono font-bold">
+              {introPresets.find((p) => p.id === selectedPresetId)?.name || 'Gamer / Streamer'}
+            </span>
           </div>
         </div>
       </div>
@@ -544,6 +703,61 @@ export const NewsToVideoView: React.FC = () => {
       {currentScreen === 1 && (
         <div className="space-y-6 animate-fadeIn">
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
+            
+            {/* 0. ESTILO DO CANAL & BORDÃO DE ABERTURA (SALVO NO BANCO SQLITE) */}
+            <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-rose-400" />
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Estilo do Canal & Frase de Abertura (0 a 8s):
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 font-mono">
+                    SQLite Persistido
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Combo de Presets */}
+                  <select
+                    value={selectedPresetId}
+                    onChange={(e) => handleSelectPreset(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold cursor-pointer"
+                  >
+                    {introPresets.map((pr) => (
+                      <option key={pr.id} value={pr.id}>
+                        {pr.name} {pr.isDefault ? '⭐' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Botão Salvar no Banco */}
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrentPreset}
+                    disabled={isSavingPreset}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingPreset ? 'Salvando...' : presetSavedFeedback ? '✓ Salvo!' : 'Salvar no Banco'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input da Frase de Gancho / Abertura */}
+              <div className="space-y-1">
+                <label className="text-[11px] text-slate-400 block font-medium">
+                  Frase de Abertura / Gancho (Edite livremente para falar diferente em vídeos de política, notícia ou games):
+                </label>
+                <input
+                  type="text"
+                  value={customHookPhrase}
+                  onChange={(e) => setCustomHookPhrase(e.target.value)}
+                  placeholder="Ex: Fala moçada! Segura firme esse controle... ou Atenção para as notícias de hoje..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 font-sans"
+                />
+              </div>
+            </div>
             
             {/* 1. ESCOLHER O SITE / URL DA NOTÍCIA */}
             <div className="space-y-2">
@@ -972,24 +1186,38 @@ export const NewsToVideoView: React.FC = () => {
             </div>
           </div>
 
-          {/* 1. TEXTO QUE FOI CAPTURADO DA NOTÍCIA */}
+          {/* 1. TEXTO QUE FOI CAPTURADO DA NOTÍCIA (EDITÁVEL LIVREMENTE) */}
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  1. Texto Capturado da Notícia
+                  1. Texto da Notícia (Editor Livre para o Vídeo)
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-mono line-clamp-1">{article.title}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Apague ou edite livremente para deixar apenas os assuntos que deseja no vídeo. Use o botão ao lado para voltar ao original se quiser falar de outro tema.
+                </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
-                  {article.fullText ? article.fullText.split(/\s+/).length : 0} palavras
+                  {(editedFullText || '').split(/\s+/).filter(Boolean).length} palavras
                 </span>
                 <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
-                  {article.fullText ? article.fullText.length : 0} caracteres
+                  {(editedFullText || '').length} caracteres
                 </span>
+
+                {/* Botão para Restaurar Texto Completo Original */}
+                <button
+                  type="button"
+                  onClick={handleRestoreOriginalText}
+                  title="Volta o texto para a versão bruta original da matéria"
+                  className="px-3 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Restaurar Texto Completo Original</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleCopyRawText}
@@ -1001,21 +1229,50 @@ export const NewsToVideoView: React.FC = () => {
               </div>
             </div>
 
-            {/* Barra de Busca no Texto */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-              <input
-                type="text"
-                value={rawTextSearch}
-                onChange={(e) => setRawTextSearch(e.target.value)}
-                placeholder="Filtrar ou pesquisar palavras no texto bruto..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-              />
+            {/* Barra de Busca e Filtro de Parágrafos */}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={rawTextSearch}
+                  onChange={(e) => setRawTextSearch(e.target.value)}
+                  placeholder="Pesquisar palavra no texto (ex: arma, operador, fuzil, lancamento)..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              {rawTextSearch.trim() && (
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                  <span className="text-xs px-2.5 py-1.5 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 font-mono">
+                    {matchCount} {matchCount === 1 ? 'ocorrência' : 'ocorrências'}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleFilterParagraphsBySearch}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Filtrar Parágrafos com "{rawTextSearch}"</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Caixa com o Texto Bruto Completo */}
-            <div className="h-64 overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
-              {filteredRawText || 'Nenhum trecho correspondente à busca.'}
+            {/* Editor de Texto Livre */}
+            <div className="space-y-1">
+              <textarea
+                value={editedFullText}
+                onChange={(e) => setEditedFullText(e.target.value)}
+                rows={12}
+                placeholder="Texto da matéria capturada... Edite, apague partes ou adicione observações livremente!"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y shadow-inner selection:bg-indigo-600 selection:text-white"
+              />
+              <div className="text-[11px] text-slate-500 flex items-center justify-between px-1">
+                <span>Dica: você pode selecionar e apagar qualquer bloco diretamente no editor acima.</span>
+                <span>O roteiro do vídeo usará o conteúdo editado exatamente como estiver nesta caixa.</span>
+              </div>
             </div>
           </div>
 
@@ -1213,22 +1470,37 @@ export const NewsToVideoView: React.FC = () => {
               </button>
             </div>
 
-            {/* TEXTO GUIA DE LEITURA (TELEPROMPTER) */}
+            {/* TEXTO GUIA DE LEITURA (TELEPROMPTER DINÂMICO CONECTADO AO BANCO) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                   <Radio className="w-4 h-4 text-rose-400" />
-                  Texto Guia de Leitura (Leia com energia natural de streamer):
+                  Texto Guia do Teleprompter (Leia com energia natural para clonar sua voz):
                 </label>
-                <span className="text-[10px] text-amber-400 font-mono">Meta: 30 a 45 segundos</span>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-amber-400 font-mono">Meta: 30 a 45s</span>
+                  {/* Seletor de Preset no Teleprompter */}
+                  <select
+                    value={selectedPresetId}
+                    onChange={(e) => handleSelectPreset(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-rose-500 font-medium cursor-pointer"
+                  >
+                    {introPresets.map((pr) => (
+                      <option key={pr.id} value={pr.id}>
+                        {pr.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans space-y-2 select-none">
-                <p className="font-bold text-rose-300">
-                  "Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo..."
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans space-y-2 select-none shadow-inner">
+                <p className="font-bold text-rose-300 text-sm">
+                  "{customHookPhrase}"
                 </p>
-                <p>
-                  "Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento. Preste bastante atenção em cada detalhe, porque a jogabilidade mudou completamente. Não se esqueça de deixar o seu like e se inscrever no canal para não perder nenhum conteúdo exclusivo!"
+                <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">
+                  {customReadingGuide}
                 </p>
               </div>
             </div>

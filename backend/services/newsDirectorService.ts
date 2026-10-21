@@ -43,6 +43,9 @@ class NewsDirectorService {
     targetDurationMinutes?: number;
     selectedImageIds?: string[];
     brollChannel?: string;
+    customHookHeading?: string;
+    customHookNarration?: string;
+    editedFullText?: string;
   }): NewsVideoPlan {
     const {
       article,
@@ -52,14 +55,32 @@ class NewsDirectorService {
       targetDurationMinutes = 5,
       selectedImageIds,
       brollChannel = '@stanleyalvesbr',
+      customHookHeading,
+      customHookNarration,
+      editedFullText,
     } = params;
 
     const isGamer = styleMode === 'gamer_streamer';
 
-    // 1. Filtrar Seções com Base no Foco Temático Escolhido pelo Usuário
+    // 1. Filtrar Seções com Base no Texto Editado pelo Usuário ou no Foco Temático Escolhido
     let filteredSections: ContentSection[] = [...article.sections];
 
-    if (themeFocus === 'weapons') {
+    if (editedFullText && editedFullText.trim()) {
+      // Se o usuário editou o texto para deixar somente o que quer, convertemos seus parágrafos em seções ativas
+      const customParagraphs = editedFullText
+        .split(/\n+/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 15);
+
+      if (customParagraphs.length > 0) {
+        filteredSections = customParagraphs.map((p, idx) => ({
+          heading: `DESTAQUE #${idx + 1}`,
+          subheading: p.length > 60 ? p.slice(0, 57) + '...' : p,
+          content: p,
+          category: 'destaque_selecionado',
+        }));
+      }
+    } else if (themeFocus === 'weapons') {
       filteredSections = article.sections.filter(
         (s) =>
           s.category === 'fuzis_e_armas' ||
@@ -204,6 +225,14 @@ class NewsDirectorService {
       hookNarration = isGamer
         ? `Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Atenção total porque foram reveladas as informações oficiais completas sobre ${article.title.slice(0, 50)}! Vamos conferir cada detalhe juntos agora!`
         : `Olá a todos. Sejam muito bem-vindos. Hoje vamos analisar o guia oficial de lançamento: ${article.title.slice(0, 50)}.`;
+    }
+
+    // Se o usuário personalizou a frase de abertura na tela/banco, usar com prioridade máxima
+    if (customHookNarration && customHookNarration.trim()) {
+      hookNarration = customHookNarration.trim();
+      if (customHookHeading && customHookHeading.trim()) {
+        hookHeading = customHookHeading.trim();
+      }
     }
 
     const hookDuration = this.calculateDurationWithSafetyMargin(hookNarration, 8);
