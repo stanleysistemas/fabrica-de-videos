@@ -291,6 +291,21 @@ app.get('/api/voices/catalog', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint: Clonar voz a partir de gravação feita no microfone do navegador
+app.post('/api/voices/clone-recording', async (req: Request, res: Response) => {
+  try {
+    const { name, audioBase64, destinations } = req.body;
+    if (!name || !audioBase64 || !Array.isArray(destinations) || destinations.length === 0) {
+      return res.status(400).json({ error: 'Nome, áudio e ao menos um destino são obrigatórios' });
+    }
+    const { voiceCatalogService } = await import('./services/voiceCatalogService');
+    const result = await voiceCatalogService.cloneFromRecording({ name, audioBase64, destinations });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao clonar voz a partir da gravação' });
+  }
+});
+
 // Endpoint: Visão Multimodal de Vídeo (Assistir Referência do YouTube)
 app.post('/api/analyze-video', async (req: Request, res: Response) => {
   try {

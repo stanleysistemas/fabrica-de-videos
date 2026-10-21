@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSettingsStore } from '../../stores/useSettingsStore';
 import { 
   Sparkles, Link, Check, RefreshCw, Copy, Search, 
-  Gamepad2, Image as ImageIcon, Film, X, AlertTriangle, Key,
+  Gamepad2, Image as ImageIcon, Film, X, AlertTriangle,
   Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
-  Upload, CheckCircle2, Video, Play, Pause, Volume2, ShieldCheck,
-  Camera, Layers, Cpu
+  Upload, CheckCircle2, Video, Play, Pause, Square, Volume2, Camera,
+  Radio
 } from 'lucide-react';
 
 interface ScrapedImage {
@@ -61,16 +60,13 @@ interface VoiceItem {
   id: string;
   name: string;
   engine: 'voicestudio_local' | 'elevenlabs';
-  categoryLabel: string;
-  tone: string;
+  group: string;
   description: string;
   sampleAudioUrl: string;
-  isCustomCloned?: boolean;
+  isCloned: boolean;
 }
 
 export const NewsToVideoView: React.FC = () => {
-  const { clonedVoices } = useSettingsStore();
-
   // Controle de Tela (1 = Configurações Prévia, 2 = Texto Capturado e Mídias)
   const [currentScreen, setCurrentScreen] = useState<1 | 2>(1);
 
@@ -81,91 +77,41 @@ export const NewsToVideoView: React.FC = () => {
   const [videoFormat, setVideoFormat] = useState<'horizontal' | 'vertical'>('horizontal'); // 16:9 ou 9:16
   const [targetDurationMinutes, setTargetDurationMinutes] = useState<number>(5); // 1, 3, 5, 10, 15 min
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>('avatar_stanley_setup');
-  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'elevenlabs'>('voicestudio_local');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('voice_stanley_official');
+  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'elevenlabs'>('elevenlabs');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
   const [language, setLanguage] = useState<string>('pt-BR'); // pt-BR, en-US, es-ES
   const [lipSyncEngine, setLipSyncEngine] = useState<'heygen' | 'latentsync'>('heygen');
 
-  // Catálogo de Vozes com Prévia de Áudio
+  // Catálogo Real de Vozes (ElevenLabs e VoiceStudio)
   const [voiceCatalog, setVoiceCatalog] = useState<{
     voicestudio: VoiceItem[];
     elevenlabs: VoiceItem[];
+    elevenlabsStatus: string;
+    elevenlabsMessage?: string;
   }>({
-    voicestudio: [
-      {
-        id: 'voice_stanley_official',
-        name: 'Minha Voz Oficial (Clonada - Stanley Alves)',
-        engine: 'voicestudio_local',
-        categoryLabel: 'VoiceStudio Local (Custo $0)',
-        tone: 'grave',
-        description: 'Voz personalizada com o bordão "Fala moçada! Segura o controle..." calibrada para games e tech.',
-        sampleAudioUrl: '',
-        isCustomCloned: true,
-      },
-      {
-        id: 'voice_vs_marcus',
-        name: 'Marcus Prime (Documentário)',
-        engine: 'voicestudio_local',
-        categoryLabel: 'VoiceStudio Local (Custo $0)',
-        tone: 'grave',
-        description: 'Voz profunda calibrada para autoridade, história e retenção narrativa estilo Vox.',
-        sampleAudioUrl: '',
-        isCustomCloned: false,
-      },
-      {
-        id: 'voice_vs_elena',
-        name: 'Elena Tech (Dinâmica)',
-        engine: 'voicestudio_local',
-        categoryLabel: 'VoiceStudio Local (Custo $0)',
-        tone: 'dinamico',
-        description: 'Entonação ágil e moderna ideal para canais dark de tecnologia, curiosidades e finanças.',
-        sampleAudioUrl: '',
-        isCustomCloned: false,
-      },
-    ],
-    elevenlabs: [
-      {
-        id: 'pNInz6obpgDQGcFmaJgB',
-        name: 'Adam (Profundo & Confiante)',
-        engine: 'elevenlabs',
-        categoryLabel: 'ElevenLabs Nuvem',
-        tone: 'grave',
-        description: 'Tom firme, confiante e cinematográfico. Excelente para narração épica e tech.',
-        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/pNInz6obpgDQGcFmaJgB/sample.mp3',
-      },
-      {
-        id: 'ErXwobaYiN019PkySvjV',
-        name: 'Antoni (Gamer & Dinâmico)',
-        engine: 'elevenlabs',
-        categoryLabel: 'ElevenLabs Nuvem',
-        tone: 'dinamico',
-        description: 'Ritmo enérgico, dicção clara e casual. Perfeito para notícias de games e lives.',
-        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/ErXwobaYiN019PkySvjV/sample.mp3',
-      },
-      {
-        id: '21m00Tcm4TlvDq8ikWAM',
-        name: 'Rachel (Noticiosa & Calma)',
-        engine: 'elevenlabs',
-        categoryLabel: 'ElevenLabs Nuvem',
-        tone: 'suave',
-        description: 'Voz feminina clara e profissional, padrão de telejornais e reportagens.',
-        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/21m00Tcm4TlvDq8ikWAM/sample.mp3',
-      },
-      {
-        id: 'onwK4e9ZLuTAKqWW03F9',
-        name: 'Daniel (Documentário Sério)',
-        engine: 'elevenlabs',
-        categoryLabel: 'ElevenLabs Nuvem',
-        tone: 'grave',
-        description: 'Voz madura e detalhista para dossiês e matérias investigativas.',
-        sampleAudioUrl: 'https://storage.googleapis.com/eleven-public-prod/previews/voices/onwK4e9ZLuTAKqWW03F9/sample.mp3',
-      },
-    ],
+    voicestudio: [],
+    elevenlabs: [],
+    elevenlabsStatus: 'loading',
   });
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
 
-  // Player de Áudio de Teste
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  // Player de Áudio
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Modal de Gravação de Voz via Microfone
+  const [showVoiceCloneModal, setShowVoiceCloneModal] = useState(false);
+  const [cloneVoiceName, setCloneVoiceName] = useState('Minha Voz Oficial (Stanley Alves)');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [recordedAudioBase64, setRecordedAudioBase64] = useState<string | null>(null);
+  const [cloneDestinations, setCloneDestinations] = useState<Array<'voicestudio' | 'elevenlabs'>>(['voicestudio', 'elevenlabs']);
+  const [isCloningVoice, setIsCloningVoice] = useState(false);
+  const [cloneFeedback, setCloneFeedback] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<any>(null);
 
   // Lista de Avatares Cadastrados
   const [avatarsList, setAvatarsList] = useState<AvatarOption[]>([
@@ -202,128 +148,188 @@ export const NewsToVideoView: React.FC = () => {
   const [brollVideoSource, setBrollVideoSource] = useState<string>('@stanleyalvesbr');
   const [selectedStockVideo, setSelectedStockVideo] = useState<StockVideoItem | null>(null);
 
-  // Modais de Stock Videos e Chaves de API
+  // Modal de Stock Videos
   const [showStockModal, setShowStockModal] = useState(false);
   const [stockSearchQuery, setStockSearchQuery] = useState('gameplay 4k');
   const [isSearchingStock, setIsSearchingStock] = useState(false);
   const [stockVideos, setStockVideos] = useState<StockVideoItem[]>([]);
 
-  const [showApiKeysModal, setShowApiKeysModal] = useState(false);
-  const [apiKeysStatus, setApiKeysStatus] = useState<any>({});
-  const [formKeys, setFormKeys] = useState({
-    pexelsApiKey: '',
-    pixabayApiKey: '',
-    heygenApiKey: '',
-    replicateApiToken: '',
-  });
-  const [isSavingKeys, setIsSavingKeys] = useState(false);
-  const [saveKeysSuccess, setSaveKeysSuccess] = useState(false);
+  // Carregar catálogo real de vozes
+  const loadVoices = async () => {
+    setIsLoadingVoices(true);
+    try {
+      const res = await fetch('http://localhost:3001/api/voices/catalog');
+      if (res.ok) {
+        const data = await res.json();
+        setVoiceCatalog({
+          voicestudio: data.voicestudio || [],
+          elevenlabs: data.elevenlabs || [],
+          elevenlabsStatus: data.elevenlabsStatus || 'ok',
+          elevenlabsMessage: data.elevenlabsMessage,
+        });
 
-  // Carregar status das chaves de API e catálogo de vozes
+        // Seleciona a primeira voz disponível caso ainda não haja selecionada
+        if (voiceEngine === 'elevenlabs' && data.elevenlabs?.length > 0 && !selectedVoiceId) {
+          setSelectedVoiceId(data.elevenlabs[0].id);
+        } else if (voiceEngine === 'voicestudio_local' && data.voicestudio?.length > 0 && !selectedVoiceId) {
+          setSelectedVoiceId(data.voicestudio[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar catálogo de vozes:', err);
+    } finally {
+      setIsLoadingVoices(false);
+    }
+  };
+
   useEffect(() => {
-    // 1. Chaves de API
-    fetch('http://localhost:3001/api/stock-videos/keys')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) {
-          setApiKeysStatus(data);
-          if (data.keys) setFormKeys(data.keys);
-        }
-      })
-      .catch(() => {});
-
-    // 2. Catálogo de vozes
-    fetch('http://localhost:3001/api/voices/catalog')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) {
-          setVoiceCatalog({
-            voicestudio: data.voicestudio || [],
-            elevenlabs: data.elevenlabs || [],
-          });
-        }
-      })
-      .catch(() => {});
+    loadVoices();
   }, []);
 
-  // Tocar / Pausar Áudio de Demonstração de Voz
-  const handleTogglePlayVoice = (voice: VoiceItem) => {
-    // Se já estiver tocando essa voz, pausa
-    if (playingVoiceId === voice.id) {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-      }
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-      setPlayingVoiceId(null);
+  // Quando troca o motor de voz (VoiceStudio vs ElevenLabs), atualiza a voz selecionada
+  useEffect(() => {
+    const activeList = voiceEngine === 'voicestudio_local' ? voiceCatalog.voicestudio : voiceCatalog.elevenlabs;
+    if (activeList.length > 0) {
+      setSelectedVoiceId(activeList[0].id);
+    } else {
+      setSelectedVoiceId('');
+    }
+    // Para áudio se estiver tocando
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
+    }
+  }, [voiceEngine, voiceCatalog]);
+
+  // Tocar / Pausar Amostra da Voz Selecionada
+  const handleTogglePlaySample = () => {
+    if (isPlayingAudio && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
       return;
     }
 
-    // Se tiver URL de áudio MP3 (ElevenLabs ou VoiceStudio gravado)
-    if (voice.sampleAudioUrl && voice.sampleAudioUrl.startsWith('http')) {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
+    const activeList = voiceEngine === 'voicestudio_local' ? voiceCatalog.voicestudio : voiceCatalog.elevenlabs;
+    const currentVoice = activeList.find((v) => v.id === selectedVoiceId);
+
+    if (currentVoice?.sampleAudioUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause();
       }
-      const audio = new Audio(voice.sampleAudioUrl);
-      audioPlayerRef.current = audio;
-      audio.onended = () => setPlayingVoiceId(null);
-      audio.onerror = () => {
-        // Fallback para síntese de voz nativa caso o link falhe
-        speakNativeSample(voice);
-      };
+      const audio = new Audio(currentVoice.sampleAudioUrl);
+      audioRef.current = audio;
+      audio.onended = () => setIsPlayingAudio(false);
+      audio.onerror = () => setIsPlayingAudio(false);
       audio.play().then(() => {
-        setPlayingVoiceId(voice.id);
-      }).catch(() => {
-        speakNativeSample(voice);
+        setIsPlayingAudio(true);
+      }).catch((e) => {
+        console.warn('Erro ao tocar áudio:', e);
+        setIsPlayingAudio(false);
       });
     } else {
-      // Síntese nativa em português com o bordão
-      speakNativeSample(voice);
+      alert('Esta voz ainda não possui um áudio de amostra cadastrado.');
     }
   };
 
-  // Síntese de fala de demonstração (fallback ou teste instantâneo)
-  const speakNativeSample = (voice: VoiceItem) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const phrase = voice.id === 'voice_stanley_official' 
-        ? 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo!'
-        : `Olá! Esta é uma demonstração da voz ${voice.name} para o seu vídeo.`;
-
-      const utterance = new SpeechSynthesisUtterance(phrase);
-      utterance.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US';
-      utterance.pitch = voice.tone === 'grave' ? 0.85 : voice.tone === 'dinamico' ? 1.15 : 1.0;
-      utterance.rate = voice.tone === 'dinamico' ? 1.1 : 0.95;
-
-      utterance.onend = () => setPlayingVoiceId(null);
-      utterance.onerror = () => setPlayingVoiceId(null);
-
-      setPlayingVoiceId(voice.id);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // Salvar chaves de API
-  const handleSaveApiKeys = async () => {
-    setIsSavingKeys(true);
+  // Iniciar Gravação pelo Microfone do Navegador
+  const handleStartRecording = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/stock-videos/keys', {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordedAudioUrl(audioUrl);
+
+        // Converter para Base64
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          setRecordedAudioBase64(reader.result as string);
+        };
+
+        // Desligar tracks do microfone
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      setRecordedAudioUrl(null);
+      setCloneFeedback(null);
+
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error('Erro ao acessar microfone:', err);
+      alert('Não foi possível acessar o seu microfone. Verifique as permissões do navegador.');
+    }
+  };
+
+  // Parar Gravação
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    }
+  };
+
+  // Enviar Gravação para Clonar a Voz
+  const handleSaveClonedVoice = async () => {
+    if (!cloneVoiceName.trim() || !recordedAudioBase64) {
+      alert('Grave ao menos um áudio e informe o nome da voz.');
+      return;
+    }
+    if (cloneDestinations.length === 0) {
+      alert('Selecione ao menos um destino para clonar (VoiceStudio ou ElevenLabs).');
+      return;
+    }
+
+    setIsCloningVoice(true);
+    setCloneFeedback(null);
+
+    try {
+      const res = await fetch('http://localhost:3001/api/voices/clone-recording', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formKeys),
+        body: JSON.stringify({
+          name: cloneVoiceName.trim(),
+          audioBase64: recordedAudioBase64,
+          destinations: cloneDestinations,
+        }),
       });
-      if (res.ok) {
-        setSaveKeysSuccess(true);
-        setTimeout(() => setSaveKeysSuccess(false), 2500);
-        const statusRes = await fetch('http://localhost:3001/api/stock-videos/keys');
-        const statusData = await statusRes.json();
-        if (statusData.success) setApiKeysStatus(statusData);
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCloneFeedback('Voz clonada e cadastrada com sucesso!');
+        await loadVoices();
+        setTimeout(() => {
+          setShowVoiceCloneModal(false);
+          setCloneFeedback(null);
+          setRecordedAudioUrl(null);
+          setRecordedAudioBase64(null);
+        }, 1500);
+      } else {
+        setCloneFeedback(data.error || 'Falha ao clonar voz.');
       }
-    } catch (err) {
-      console.error('Erro ao salvar chaves:', err);
+    } catch (err: any) {
+      console.error('Erro ao clonar voz:', err);
+      setCloneFeedback('Erro de conexão ao enviar gravação.');
     } finally {
-      setIsSavingKeys(false);
+      setIsCloningVoice(false);
     }
   };
 
@@ -390,6 +396,8 @@ export const NewsToVideoView: React.FC = () => {
           brollChannel: brollVideoSource,
           themeFocus: 'all',
           lipSyncEngine,
+          voiceEngine,
+          selectedVoiceId,
         }),
       });
 
@@ -445,10 +453,12 @@ export const NewsToVideoView: React.FC = () => {
       : article.fullText
     : '';
 
-  // Lista de vozes ativas conforme o motor selecionado
+  // Lista de vozes ativas do motor selecionado
   const currentVoiceList = voiceEngine === 'voicestudio_local' 
     ? voiceCatalog.voicestudio 
     : voiceCatalog.elevenlabs;
+
+  const currentSelectedVoiceObj = currentVoiceList.find((v) => v.id === selectedVoiceId);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
@@ -470,21 +480,12 @@ export const NewsToVideoView: React.FC = () => {
           </p>
         </div>
 
-        {/* BORDÃO OFICIAL CRAVADO & GESTÃO DE CHAVES */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+        {/* BORDÃO OFICIAL CRAVADO */}
+        <div className="flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2 shadow-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>Bordão Cravado: "Fala moçada! Segura o controle..."</span>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowApiKeysModal(true)}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-all"
-          >
-            <Key className="w-3.5 h-3.5 text-amber-400" />
-            <span>Chaves de API</span>
-          </button>
         </div>
       </div>
 
@@ -493,7 +494,7 @@ export const NewsToVideoView: React.FC = () => {
         <button
           type="button"
           onClick={() => setCurrentScreen(1)}
-          className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+          className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
             currentScreen === 1
               ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -519,10 +520,10 @@ export const NewsToVideoView: React.FC = () => {
           disabled={!article}
           className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
             currentScreen === 2
-              ? 'bg-emerald-600/15 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+              ? 'bg-emerald-600/15 border-emerald-500 text-white shadow-lg shadow-emerald-500/10 cursor-pointer'
               : !article
               ? 'bg-slate-900/50 border-slate-800/50 text-slate-600 cursor-not-allowed'
-              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer'
           }`}
         >
           <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
@@ -555,7 +556,7 @@ export const NewsToVideoView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setUrl('https://www.callofduty.com/br/pt/blog/2026/10/call-of-duty-modern-warfare-4-launch-multiplayer-operators-weapons-equipment-create-a-class')}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline cursor-pointer"
                   >
                     Exemplo COD MW4
                   </button>
@@ -563,7 +564,7 @@ export const NewsToVideoView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setUrl('https://g1.globo.com/tecnologia/')}
-                    className="text-[11px] text-slate-400 hover:text-slate-300 font-semibold underline"
+                    className="text-[11px] text-slate-400 hover:text-slate-300 font-semibold underline cursor-pointer"
                   >
                     Exemplo Notícia Tech
                   </button>
@@ -591,7 +592,7 @@ export const NewsToVideoView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setVideoFormat('horizontal')}
-                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 ${
+                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 cursor-pointer ${
                       videoFormat === 'horizontal'
                         ? 'bg-sky-600/20 border-sky-500 text-white shadow-md shadow-sky-500/20'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -607,7 +608,7 @@ export const NewsToVideoView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setVideoFormat('vertical')}
-                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 ${
+                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 cursor-pointer ${
                       videoFormat === 'vertical'
                         ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-500/20'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -640,7 +641,7 @@ export const NewsToVideoView: React.FC = () => {
                       key={min}
                       type="button"
                       onClick={() => setTargetDurationMinutes(min)}
-                      className={`py-2.5 rounded-xl border text-center transition-all ${
+                      className={`py-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                         targetDurationMinutes === min
                           ? 'bg-emerald-600 text-white font-bold border-emerald-500 shadow-md shadow-emerald-600/30'
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -663,7 +664,7 @@ export const NewsToVideoView: React.FC = () => {
               </div>
             </div>
 
-            {/* 4. ESCOLHER AVATAR QUE IREMOS USAR (COM REGRA DE CÂMERA DO STANLEY) */}
+            {/* 4. ESCOLHER AVATAR DO APRESENTADOR */}
             <div className="space-y-3 pt-4 border-t border-slate-800">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
@@ -673,7 +674,7 @@ export const NewsToVideoView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAvatarModal(true)}
-                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-all"
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>+ Cadastrar Novo Avatar</span>
@@ -720,123 +721,125 @@ export const NewsToVideoView: React.FC = () => {
               </div>
             </div>
 
-            {/* 5. VOZ QUE SERÁ USADA COM PLAYER PARA ESCUTAR E TESTAR */}
+            {/* 5. VOZ QUE SERÁ USADA (COMBO COMPACTO DE 1 LINHA + PLAYER + BOTÃO DE GRAVAR MICROFONE) */}
             <div className="space-y-3 pt-4 border-t border-slate-800">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <Mic className="w-4 h-4 text-rose-400" />
-                  5. Voz que Será Usada (Escute e Teste Antes de Escolher):
+                  5. Voz que Será Usada:
                 </label>
-                <span className="text-[11px] text-slate-400">
-                  Clique no play para ouvir a entonação da voz!
-                </span>
+
+                {/* Alternância Rápida de Motor */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEngine('elevenlabs')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      voiceEngine === 'elevenlabs'
+                        ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                        : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>☁️ ElevenLabs (Conta Real)</span>
+                    <span className="text-[10px] bg-purple-950/60 px-1.5 py-0.2 rounded font-mono">
+                      {voiceCatalog.elevenlabs.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEngine('voicestudio_local')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      voiceEngine === 'voicestudio_local'
+                        ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                        : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🎙️ VoiceStudio (Local)</span>
+                    <span className="text-[10px] bg-rose-950/60 px-1.5 py-0.2 rounded font-mono">
+                      {voiceCatalog.voicestudio.length}
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              {/* Seleção de Motor de Voz */}
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setVoiceEngine('voicestudio_local')}
-                  className={`p-3 rounded-xl border text-left transition-all flex items-center gap-3 ${
-                    voiceEngine === 'voicestudio_local'
-                      ? 'bg-rose-600/20 border-rose-500 text-white shadow-md shadow-rose-500/20'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Cpu className={`w-5 h-5 ${voiceEngine === 'voicestudio_local' ? 'text-rose-400' : 'text-slate-500'}`} />
-                  <div>
-                    <div className="text-xs font-extrabold">Voz Clonada Local (VoiceStudio)</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Roda no seu PC (Intel i5-13500) • Custo R$ 0,00</div>
-                  </div>
-                </button>
+              {/* LINHA COMPACTA: COMBO DE VOZES + BOTÃO PLAY + BOTÃO GRAVAR MICROFONE */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                
+                {/* Combo (Select) de Vozes */}
+                <div className="md:col-span-7">
+                  <select
+                    value={selectedVoiceId}
+                    onChange={(e) => setSelectedVoiceId(e.target.value)}
+                    disabled={currentVoiceList.length === 0}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500 font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    {currentVoiceList.length === 0 ? (
+                      <option value="">
+                        {voiceEngine === 'voicestudio_local'
+                          ? 'Nenhuma voz clonada cadastrada ainda (Grave sua voz ao lado)'
+                          : 'Carregando vozes do ElevenLabs...'}
+                      </option>
+                    ) : (
+                      currentVoiceList.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} {v.isCloned ? '⭐ [Clonada]' : ''} - {v.group}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setVoiceEngine('elevenlabs')}
-                  className={`p-3 rounded-xl border text-left transition-all flex items-center gap-3 ${
-                    voiceEngine === 'elevenlabs'
-                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-500/20'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Sparkles className={`w-5 h-5 ${voiceEngine === 'elevenlabs' ? 'text-purple-400' : 'text-slate-500'}`} />
-                  <div>
-                    <div className="text-xs font-extrabold">ElevenLabs (API Nuvem)</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Vozes consagradas e ultra realistas de estúdio</div>
-                  </div>
-                </button>
+                {/* Botão Play / Ouvir Amostra */}
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    onClick={handleTogglePlaySample}
+                    disabled={!currentSelectedVoiceObj?.sampleAudioUrl}
+                    className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                      isPlayingAudio
+                        ? 'bg-rose-600 border-rose-500 text-white animate-pulse'
+                        : 'bg-slate-950 border-slate-700 hover:border-rose-500 text-slate-200 hover:text-white'
+                    }`}
+                  >
+                    {isPlayingAudio ? (
+                      <>
+                        <Pause className="w-4 h-4" />
+                        <span>Pausar</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Ouvir</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Botão para Gravar pelo Microfone */}
+                <div className="md:col-span-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowVoiceCloneModal(true)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 cursor-pointer"
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>+ Gravar Minha Voz</span>
+                  </button>
+                </div>
+
               </div>
 
-              {/* LISTA DE VOZES COM PLAYER PARA OUVIR E TESTAR CADA UMA */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                {currentVoiceList.map((v) => {
-                  const isSelected = selectedVoiceId === v.id;
-                  const isPlaying = playingVoiceId === v.id;
-
-                  return (
-                    <div
-                      key={v.id}
-                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
-                        isSelected
-                          ? 'bg-slate-950 border-rose-500 ring-1 ring-rose-500/40 shadow-lg shadow-rose-950/20'
-                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-xs text-white truncate">{v.name}</span>
-                            {v.isCustomCloned && (
-                              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
-                                Stanley Oficial
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">{v.description}</p>
-                        </div>
-
-                        {/* Botão de Play / Ouvir Amostra */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTogglePlayVoice(v);
-                          }}
-                          className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                            isPlaying
-                              ? 'bg-rose-500 text-white animate-pulse'
-                              : 'bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white'
-                          }`}
-                          title={isPlaying ? 'Pausar áudio' : 'Ouvir amostra de voz'}
-                        >
-                          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-850">
-                        <span className="text-[10px] text-slate-400 font-mono uppercase">
-                          Tom: <strong className="text-slate-300">{v.tone}</strong>
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedVoiceId(v.id)}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                            isSelected
-                              ? 'bg-rose-600 text-white shadow-sm'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                          }`}
-                        >
-                          {isSelected ? '✓ Selecionada' : 'Usar Esta Voz'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Detalhes da Voz Selecionada */}
+              {currentSelectedVoiceObj && (
+                <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                  <span><strong>Descrição:</strong> {currentSelectedVoiceObj.description || 'Voz pronta para narração.'}</span>
+                  <span className="text-[10px] text-purple-400 uppercase font-mono">{currentSelectedVoiceObj.group}</span>
+                </div>
+              )}
             </div>
 
-            {/* 6. IDIOMA DO VÍDEO & 7. MOTOR DE LIP-SYNC DO AVATAR */}
+            {/* 6. IDIOMA DO VÍDEO & 7. MOTOR DE LIP-SYNC */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
               
               {/* Idioma do Vídeo */}
@@ -856,7 +859,7 @@ export const NewsToVideoView: React.FC = () => {
                       key={lang.code}
                       type="button"
                       onClick={() => setLanguage(lang.code)}
-                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1 cursor-pointer ${
                         language === lang.code
                           ? 'bg-emerald-600/20 border-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20'
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -869,7 +872,7 @@ export const NewsToVideoView: React.FC = () => {
                 </div>
               </div>
 
-              {/* 7. MOTOR DE LIP-SYNC (HEYGEN VS LATENTSYNC) */}
+              {/* 7. Motor de Lip-Sync */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                   <Video className="w-4 h-4 text-indigo-400" />
@@ -877,11 +880,10 @@ export const NewsToVideoView: React.FC = () => {
                 </label>
 
                 <div className="grid grid-cols-2 gap-2.5">
-                  {/* HeyGen API */}
                   <button
                     type="button"
                     onClick={() => setLipSyncEngine('heygen')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       lipSyncEngine === 'heygen'
                         ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -894,15 +896,14 @@ export const NewsToVideoView: React.FC = () => {
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                      Talking Photo de estúdio (idêntico ao gerado em teste).
+                      Talking Photo de estúdio com acabamento profissional.
                     </div>
                   </button>
 
-                  {/* Replicate LatentSync */}
                   <button
                     type="button"
                     onClick={() => setLipSyncEngine('latentsync')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       lipSyncEngine === 'latentsync'
                         ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
@@ -1088,7 +1089,7 @@ export const NewsToVideoView: React.FC = () => {
             )}
           </div>
 
-          {/* 3. ESCOLHA DO VÍDEO DE FUNDO (SE TIVER SOMENTE IMAGENS OU LINK DO CANAL) */}
+          {/* 3. ESCOLHA DO VÍDEO DE FUNDO */}
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
@@ -1114,7 +1115,7 @@ export const NewsToVideoView: React.FC = () => {
               </button>
             </div>
 
-            {/* Input para Colocar Link de Vídeo (ex: YouTube Live do Stanley ou MP4) */}
+            {/* Input para Colocar Link de Vídeo */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 block">
                 Colar Link de Vídeo Próprio (YouTube / MP4 / Canal):
@@ -1176,6 +1177,210 @@ export const NewsToVideoView: React.FC = () => {
               <CheckCircle2 className="w-4 h-4" />
               <span>Etapas 1 e 2 Alinhadas</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ================== MODAL DE GRAVAÇÃO E CLONAGEM DE VOZ =================== */}
+      {/* ========================================================================= */}
+      {showVoiceCloneModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5 animate-scaleUp max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Mic className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">
+                    Gravar e Clonar Minha Voz (Microfone do Navegador)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Leia o texto guia em voz alta com seu microfone para uma clonagem perfeita.</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (isRecording) handleStopRecording();
+                  setShowVoiceCloneModal(false);
+                }}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* TEXTO GUIA DE LEITURA (TELEPROMPTER) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Radio className="w-4 h-4 text-rose-400" />
+                  Texto Guia de Leitura (Leia com energia natural de streamer):
+                </label>
+                <span className="text-[10px] text-amber-400 font-mono">Meta: 30 a 45 segundos</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans space-y-2 select-none">
+                <p className="font-bold text-rose-300">
+                  "Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo..."
+                </p>
+                <p>
+                  "Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento. Preste bastante atenção em cada detalhe, porque a jogabilidade mudou completamente. Não se esqueça de deixar o seu like e se inscrever no canal para não perder nenhum conteúdo exclusivo!"
+                </p>
+              </div>
+            </div>
+
+            {/* PAINEL DE CONTROLE DE GRAVAÇÃO */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-mono font-bold text-sm ${
+                  isRecording 
+                    ? 'bg-rose-600 text-white animate-pulse' 
+                    : recordedAudioUrl 
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' 
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {isRecording ? `${recordingSeconds}s` : recordedAudioUrl ? 'OK' : 'MIC'}
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    {isRecording 
+                      ? 'Gravando seu microfone...' 
+                      : recordedAudioUrl 
+                      ? 'Gravação concluída! Pronto para clonar.' 
+                      : 'Pronto para gravar sua voz.'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {isRecording 
+                      ? 'Continue lendo o texto guia até atingir 30 segundos...' 
+                      : 'Clique em Iniciar Gravação e permita o uso do microfone.'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botões de Ação do Gravador */}
+              <div className="flex items-center gap-2">
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={handleStartRecording}
+                    className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-rose-600/30 cursor-pointer"
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>{recordedAudioUrl ? 'Regravar Áudio' : 'Iniciar Gravação'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStopRecording}
+                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-amber-600/30 cursor-pointer animate-pulse"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                    <span>Parar Gravação</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* PLAYER DA GRAVAÇÃO FEITA */}
+            {recordedAudioUrl && (
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
+                  <span>Escutar Áudio Gravado:</span>
+                  <span className="font-mono text-[11px] text-slate-400">{recordingSeconds}s gravados</span>
+                </div>
+                <audio src={recordedAudioUrl} controls className="w-full h-9 rounded" />
+              </div>
+            )}
+
+            {/* CONFIGURAÇÃO DO DESTINO E NOME */}
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Nome da Voz Clonada:</label>
+                <input
+                  type="text"
+                  value={cloneVoiceName}
+                  onChange={(e) => setCloneVoiceName(e.target.value)}
+                  placeholder="Ex: Minha Voz Oficial (Stanley Alves)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {/* Destinos da Clonagem */}
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">Onde clonar esta voz:</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cloneDestinations.includes('voicestudio')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCloneDestinations((prev) => [...prev, 'voicestudio']);
+                        } else {
+                          setCloneDestinations((prev) => prev.filter((d) => d !== 'voicestudio'));
+                        }
+                      }}
+                      className="accent-rose-500 rounded"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-white">VoiceStudio (Local)</div>
+                      <div className="text-[10px] text-slate-400">Salva no PC • Custo R$ 0,00</div>
+                    </div>
+                  </label>
+
+                  <label className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cloneDestinations.includes('elevenlabs')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCloneDestinations((prev) => [...prev, 'elevenlabs']);
+                        } else {
+                          setCloneDestinations((prev) => prev.filter((d) => d !== 'elevenlabs'));
+                        }
+                      }}
+                      className="accent-purple-500 rounded"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-white">ElevenLabs (Nuvem)</div>
+                      <div className="text-[10px] text-slate-400">Instant Voice Clone na sua conta</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* FEEDBACK E BOTÕES FINAIS */}
+            {cloneFeedback && (
+              <div className="p-3 rounded-xl bg-slate-950 border border-rose-500/40 text-xs font-bold text-rose-300 text-center">
+                {cloneFeedback}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowVoiceCloneModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveClonedVoice}
+                disabled={isCloningVoice || !recordedAudioBase64}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isCloningVoice ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                <span>{isCloningVoice ? 'Clonando Voz...' : 'Salvar e Clonar Voz'}</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}
@@ -1338,141 +1543,6 @@ export const NewsToVideoView: React.FC = () => {
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* ===================== MODAL DE GESTÃO DE CHAVES DE API =================== */}
-      {/* ========================================================================= */}
-      {showApiKeysModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-amber-400" />
-                Gerenciar Chaves de API (Pexels, Pixabay, HeyGen, Replicate)
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowApiKeysModal(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {saveKeysSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>Chaves salvas com sucesso em storage/api_keys.json!</span>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
-                  <span>Pexels API Key (Vídeos Gratuitos):</span>
-                  <a
-                    href="https://www.pexels.com/api/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-indigo-400 hover:underline"
-                  >
-                    Obter Chave Grátis
-                  </a>
-                </label>
-                <input
-                  type="password"
-                  value={formKeys.pexelsApiKey}
-                  onChange={(e) => setFormKeys({ ...formKeys, pexelsApiKey: e.target.value })}
-                  placeholder="Cole sua API Key do Pexels..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
-                  <span>Pixabay API Key (Vídeos Gratuitos):</span>
-                  <a
-                    href="https://pixabay.com/api/docs/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-indigo-400 hover:underline"
-                  >
-                    Obter Chave Grátis
-                  </a>
-                </label>
-                <input
-                  type="password"
-                  value={formKeys.pixabayApiKey}
-                  onChange={(e) => setFormKeys({ ...formKeys, pixabayApiKey: e.target.value })}
-                  placeholder="Cole sua API Key do Pixabay..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
-                  <span>HeyGen API Key (Talking Photo Lip-Sync):</span>
-                  <a
-                    href="https://app.heygen.com/settings?nav=API"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-indigo-400 hover:underline"
-                  >
-                    Obter Chave HeyGen
-                  </a>
-                </label>
-                <input
-                  type="password"
-                  value={formKeys.heygenApiKey}
-                  onChange={(e) => setFormKeys({ ...formKeys, heygenApiKey: e.target.value })}
-                  placeholder="Cole sua API Key do HeyGen..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
-                  <span>Replicate API Token (LatentSync ByteDance):</span>
-                  <a
-                    href="https://replicate.com/account/api-tokens"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-indigo-400 hover:underline"
-                  >
-                    Obter Token Replicate
-                  </a>
-                </label>
-                <input
-                  type="password"
-                  value={formKeys.replicateApiToken}
-                  onChange={(e) => setFormKeys({ ...formKeys, replicateApiToken: e.target.value })}
-                  placeholder="r8_..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowApiKeysModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
-              >
-                Fechar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveApiKeys}
-                disabled={isSavingKeys}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer"
-              >
-                {isSavingKeys && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Salvar Configurações</span>
-              </button>
             </div>
           </div>
         </div>

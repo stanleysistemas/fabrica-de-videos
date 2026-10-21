@@ -175,6 +175,39 @@ class NewsDirectorService {
     }
 
     // Caso normal para 3, 5, 10 ou 15 minutos:
+    const targetSeconds = Math.min(900, Math.max(60, targetDurationMinutes * 60));
+
+    // 2. Cena 1: Abertura / Gancho com Apresentação do Foco e Bordão Oficial do Stanley
+    let hookHeading = 'BOMBA: NOTÍCIA OFICIAL';
+    let hookSubheading = 'Lançamento & Análise com Stanley Alves';
+    let hookNarration = '';
+
+    if (themeFocus === 'weapons') {
+      hookHeading = 'ARSENAL COMPLETO DE MW4';
+      hookSubheading = 'Todas as Armas & Acessórios Apex';
+      hookNarration = isGamer
+        ? `Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo porque a Activision liberou o catálogo oficial com todas as armas do novo Call of Duty! Nós vamos passar fuzil por fuzil, snipers e acessórios secretos que mudam o meta. Se liga!`
+        : `Olá a todos. Sejam muito bem-vindos. No vídeo de hoje faremos uma análise técnica aprofundada de todo o arsenal de armas, calibres e conversões Apex de Modern Warfare 4.`;
+    } else if (themeFocus === 'operators') {
+      hookHeading = 'TODOS OS 33 OPERADORES';
+      hookSubheading = 'Facções & Desbloqueios';
+      hookNarration = isGamer
+        ? `Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Hoje o foco é nos 33 operadores de lançamento de Modern Warfare 4! Vamos ver as skins, as forças especiais e como desbloquear cada um sem perder tempo!`
+        : `Bem-vindos. Hoje vamos detalhar todos os 33 operadores disponíveis no lançamento de Modern Warfare 4 e seus respectivos critérios de desbloqueio.`;
+    } else if (themeFocus === 'equipment') {
+      hookHeading = 'EQUIPAMENTOS & VANTAGENS';
+      hookSubheading = 'Séries de Baixas & Armeiro 2.0';
+      hookNarration = isGamer
+        ? `Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Hoje vamos analisar as melhores séries de baixas, equipamentos táticos e o novo sistema de vantagens do multiplayer!`
+        : `Olá. Sejam bem-vindos à nossa cobertura sobre o sistema de vantagens, melhorias de campo e equipamentos táticos de Modern Warfare 4.`;
+    } else {
+      hookNarration = isGamer
+        ? `Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Atenção total porque foram reveladas as informações oficiais completas sobre ${article.title.slice(0, 50)}! Vamos conferir cada detalhe juntos agora!`
+        : `Olá a todos. Sejam muito bem-vindos. Hoje vamos analisar o guia oficial de lançamento: ${article.title.slice(0, 50)}.`;
+    }
+
+    const hookDuration = this.calculateDurationWithSafetyMargin(hookNarration, 8);
+
     scenes.push({
       id: `scene_hook_${Date.now()}`,
       order: 1,
