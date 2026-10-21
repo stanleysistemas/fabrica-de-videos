@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useProjectStore } from '../../stores/useProjectStore';
-import { useNavigationStore } from '../../stores/useNavigationStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
 import { 
-  Sparkles, Link, Check, Edit3, Play, ShieldCheck, Clock, FileText, 
-  Gamepad2, Image as ImageIcon, RefreshCw, Copy, Download, Search, 
-  Crosshair, Users, Zap, Globe, Target, AlertTriangle, Key, ExternalLink,
-  Film, X
+  Sparkles, Link, Check, RefreshCw, Copy, Search, 
+  Gamepad2, Image as ImageIcon, Film, X, AlertTriangle, Key,
+  Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
+  Upload, CheckCircle2, Video
 } from 'lucide-react';
 
 interface ScrapedImage {
@@ -14,40 +13,6 @@ interface ScrapedImage {
   alt: string;
   category?: string;
   isCover: boolean;
-}
-
-interface NewsSceneDraft {
-  id: string;
-  order: number;
-  type: 'ken_burns_news' | 'avatar_intro' | 'avatar_outro' | 'gameplay_broll';
-  heading: string;
-  subheading?: string;
-  narration: string;
-  durationInSeconds: number;
-  associatedImageId?: string;
-  associatedImageUrl?: string;
-  kenBurnsEffect: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right';
-  layoutMode: 'full_image' | 'webcam_streamer' | 'avatar_fullscreen' | 'gameplay_with_webcam';
-  category?: string;
-}
-
-export type ThemeFocusType = 'all' | 'weapons' | 'operators' | 'equipment' | 'custom';
-
-interface NewsVideoPlan {
-  id: string;
-  articleId: string;
-  title: string;
-  themeFocus: ThemeFocusType;
-  customPrompt?: string;
-  targetDurationMinutes: number;
-  totalDurationSeconds: number;
-  scenes: NewsSceneDraft[];
-  suggestedVoiceId: string;
-  styleMode: 'gamer_streamer' | 'tech_news' | 'documentary';
-  brollSource?: {
-    channel: string;
-    label: string;
-  };
 }
 
 interface ContentSection {
@@ -83,39 +48,69 @@ interface StockVideoItem {
   height: number;
 }
 
-export const NewsToVideoView: React.FC = () => {
-  const { setScenes } = useProjectStore();
-  const { setCurrentModule } = useNavigationStore();
+interface AvatarOption {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  type: 'setup_fullscreen' | 'webcam_corner' | 'custom';
+}
 
+export const NewsToVideoView: React.FC = () => {
+  const { clonedVoices } = useSettingsStore();
+
+  // Controle de Tela (1 = Configurações Prévia, 2 = Texto Capturado e Mídias)
+  const [currentScreen, setCurrentScreen] = useState<1 | 2>(1);
+
+  // === TELA 1: ESTADOS DE CONFIGURAÇÃO PRÉVIA ===
   const [url, setUrl] = useState(
     'https://www.callofduty.com/br/pt/blog/2026/10/call-of-duty-modern-warfare-4-launch-multiplayer-operators-weapons-equipment-create-a-class'
   );
-  const [styleMode] = useState<'gamer_streamer' | 'tech_news' | 'documentary'>('gamer_streamer');
-  const [targetDurationMinutes, setTargetDurationMinutes] = useState<number>(5);
-  const [brollChannel, setBrollChannel] = useState<string>('@stanleyalvesbr');
-  const [themeFocus, setThemeFocus] = useState<ThemeFocusType>('weapons');
-  const [customPrompt, setCustomPrompt] = useState<string>('');
-  
-  // Abas de visualização
-  const [viewTab, setViewTab] = useState<'scenes_editor' | 'full_script' | 'raw_text'>('scenes_editor');
-  const [rawSearchQuery, setRawSearchQuery] = useState<string>('');
+  const [videoFormat, setVideoFormat] = useState<'horizontal' | 'vertical'>('horizontal'); // 16:9 ou 9:16
+  const [targetDurationMinutes, setTargetDurationMinutes] = useState<number>(5); // 1, 3, 5, 10, 15 min
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string>('avatar_stanley_setup');
+  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'studio_voice_neural' | 'eleven_labs'>('voicestudio_local');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('voice_stanley_official');
+  const [language, setLanguage] = useState<string>('pt-BR'); // pt-BR, en-US, es-ES
+
+  // Lista de Avatares Cadastrados
+  const [avatarsList, setAvatarsList] = useState<AvatarOption[]>([
+    {
+      id: 'avatar_stanley_setup',
+      name: 'Stanley Alves (Estúdio Gamer Completo)',
+      description: 'Ideal para abertura em tela cheia com iluminação RGB e setup gamer.',
+      imageUrl: 'http://localhost:3001/storage/avatars/avatar_stanley_setup.jpg',
+      type: 'setup_fullscreen',
+    },
+    {
+      id: 'avatar_stanley_webcam',
+      name: 'Stanley Alves (Webcam Gamer Close-Up)',
+      description: 'Ideal para ficar no canto da tela comentando por cima do gameplay e fotos.',
+      imageUrl: 'http://localhost:3001/storage/avatars/avatar_stanley_webcam.jpg',
+      type: 'webcam_corner',
+    },
+  ]);
+
+  // Modal para criar/cadastrar avatar
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [newAvatarName, setNewAvatarName] = useState('');
+  const [newAvatarUrl, setNewAvatarUrl] = useState('');
+  const [avatarErrorAlert, setAvatarErrorAlert] = useState(false);
+
+  // === TELA 2: ESTADOS DE CONTEÚDO CAPTURADO & MÍDIAS ===
+  const [isLoadingScrape, setIsLoadingScrape] = useState(false);
+  const [article, setArticle] = useState<ScrapedArticle | null>(null);
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [rawTextSearch, setRawTextSearch] = useState('');
   const [copiedRawText, setCopiedRawText] = useState(false);
 
-  // Estados de dados
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRegeneratingPlan, setIsRegeneratingPlan] = useState(false);
-  const [article, setArticle] = useState<ScrapedArticle | null>(null);
-  const [plan, setPlan] = useState<NewsVideoPlan | null>(null);
-  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  const [isCompiling, setIsCompiling] = useState(false);
-  const [compileSuccess, setCompileSuccess] = useState(false);
-
-  // Filtro de galeria
-  const [imageCategoryFilter, setImageCategoryFilter] = useState<'all' | 'weapons' | 'operators'>('all');
+  // Vídeo de Fundo Contínuo (B-Roll)
+  const [brollVideoSource, setBrollVideoSource] = useState<string>('@stanleyalvesbr');
+  const [selectedStockVideo, setSelectedStockVideo] = useState<StockVideoItem | null>(null);
 
   // Modais de Stock Videos e Chaves de API
   const [showStockModal, setShowStockModal] = useState(false);
-  const [stockSearchQuery, setStockSearchQuery] = useState('call of duty gameplay');
+  const [stockSearchQuery, setStockSearchQuery] = useState('gameplay 4k');
   const [isSearchingStock, setIsSearchingStock] = useState(false);
   const [stockVideos, setStockVideos] = useState<StockVideoItem[]>([]);
 
@@ -137,6 +132,9 @@ export const NewsToVideoView: React.FC = () => {
       .then((data) => {
         if (data.success) {
           setApiKeysStatus(data);
+          if (data.keys) {
+            setFormKeys(data.keys);
+          }
         }
       })
       .catch(() => {});
@@ -154,7 +152,6 @@ export const NewsToVideoView: React.FC = () => {
       if (res.ok) {
         setSaveKeysSuccess(true);
         setTimeout(() => setSaveKeysSuccess(false), 2500);
-        // Atualizar status
         const statusRes = await fetch('http://localhost:3001/api/stock-videos/keys');
         const statusData = await statusRes.json();
         if (statusData.success) setApiKeysStatus(statusData);
@@ -183,71 +180,71 @@ export const NewsToVideoView: React.FC = () => {
     }
   };
 
-  // Dispara o scraper no backend
-  const handleScrape = async () => {
-    if (!url) return;
-    setIsLoading(true);
+  // Ação de Cadastrar Novo Avatar
+  const handleCreateAvatar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAvatarName.trim()) return;
+
+    const newId = `avatar_${Date.now()}`;
+    const newAvatar: AvatarOption = {
+      id: newId,
+      name: newAvatarName.trim(),
+      description: 'Avatar cadastrado pelo usuário.',
+      imageUrl: newAvatarUrl.trim() || 'http://localhost:3001/storage/avatars/avatar_stanley_webcam.jpg',
+      type: 'custom',
+    };
+
+    setAvatarsList((prev) => [...prev, newAvatar]);
+    setSelectedAvatarId(newId);
+    setNewAvatarName('');
+    setNewAvatarUrl('');
+    setShowAvatarModal(false);
+    setAvatarErrorAlert(false);
+  };
+
+  // Disparo da Raspagem da Notícia (Transição da Tela 1 para Tela 2)
+  const handleScrapeNews = async () => {
+    if (!url.trim()) return;
+
+    // Regra Obrigatória: se não tiver nenhum avatar selecionado/cadastrado, pedir para criar/selecionar
+    if (!selectedAvatarId || avatarsList.length === 0) {
+      setAvatarErrorAlert(true);
+      setShowAvatarModal(true);
+      return;
+    }
+
+    setIsLoadingScrape(true);
+    setAvatarErrorAlert(false);
 
     try {
       const res = await fetch('http://localhost:3001/api/news/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url, 
-          styleMode, 
-          targetDurationMinutes, 
-          brollChannel,
-          themeFocus,
-          customPrompt,
+        body: JSON.stringify({
+          url: url.trim(),
+          styleMode: 'gamer_streamer',
+          targetDurationMinutes,
+          brollChannel: brollVideoSource,
+          themeFocus: 'all',
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.article && data.plan) {
+        if (data.success && data.article) {
           setArticle(data.article);
-          setPlan(data.plan);
           setSelectedImageIds(data.article.images.map((img: ScrapedImage) => img.id));
+          // Avança para a Tela 2
+          setCurrentScreen(2);
         }
+      } else {
+        alert('Falha ao raspar a notícia. Verifique se a URL é válida e acessível.');
       }
     } catch (err) {
       console.error('[NewsToVideo] Erro ao raspar matéria:', err);
+      alert('Erro de conexão ao raspar matéria.');
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Gerar novo roteiro com novo foco temático sem raspar a web novamente
-  const handleRegenerateByFocus = async (newFocus: ThemeFocusType) => {
-    setThemeFocus(newFocus);
-    if (!article) return;
-
-    setIsRegeneratingPlan(true);
-    try {
-      const res = await fetch('http://localhost:3001/api/news/generate-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          article,
-          themeFocus: newFocus,
-          customPrompt,
-          styleMode,
-          selectedImageIds,
-          targetDurationMinutes,
-          brollChannel,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.plan) {
-          setPlan(data.plan);
-        }
-      }
-    } catch (err) {
-      console.error('[NewsToVideo] Erro ao recalcular plano temático:', err);
-    } finally {
-      setIsRegeneratingPlan(false);
+      setIsLoadingScrape(false);
     }
   };
 
@@ -276,864 +273,927 @@ export const NewsToVideoView: React.FC = () => {
     setTimeout(() => setCopiedRawText(false), 2000);
   };
 
-  // Atualizar narração de uma cena específica
-  const handleNarrationChange = (sceneId: string, newNarration: string) => {
-    if (!plan) return;
-    const updatedScenes = plan.scenes.map((sc) => {
-      if (sc.id === sceneId) {
-        const words = newNarration.split(/\s+/).length;
-        const dur = Math.max(3, Math.round((words / 2.4) * 1.15));
-        return { ...sc, narration: newNarration, durationInSeconds: dur };
-      }
-      return sc;
-    });
-
-    const totalDur = updatedScenes.reduce((acc, s) => acc + s.durationInSeconds, 0);
-    setPlan({ ...plan, scenes: updatedScenes, totalDurationSeconds: totalDur });
-  };
-
-  // Aprovar e carregar no Player Remotion do SaaS
-  const handleApproveAndSendToPlayer = () => {
-    if (!plan) return;
-    setIsCompiling(true);
-
-    const compiledScenes = plan.scenes.map((sc) => ({
-      id: sc.id,
-      title: sc.heading,
-      subtitle: sc.narration.slice(0, 60) + '...',
-      text: sc.narration,
-      durationInSeconds: sc.durationInSeconds,
-      type: 'ken_burns_news' as const,
-      associatedImageUrl: sc.associatedImageUrl,
-      imageUrl: sc.associatedImageUrl,
-      kenBurnsEffect: sc.kenBurnsEffect,
-      layoutMode: sc.layoutMode,
-      narration: sc.narration,
-    }));
-
-    setScenes(compiledScenes as any);
-    useProjectStore.setState((state) => ({
-      project: {
-        ...state.project,
-        title: plan.title,
-        brand: {
-          ...state.project.brand,
-          name: article?.siteName || 'CALL OF DUTY OFICIAL',
-        },
-      },
-    }));
-
-    setTimeout(() => {
-      setIsCompiling(false);
-      setCompileSuccess(true);
-      setTimeout(() => {
-        setCurrentModule('viral_video');
-      }, 1000);
-    }, 800);
-  };
-
-  const totalWords = plan?.scenes.reduce((acc, s) => acc + s.narration.split(/\s+/).filter(Boolean).length, 0) || 0;
-
-  // Filtragem de fotos na galeria
-  const displayedImages = article?.images.filter((img) => {
-    if (imageCategoryFilter === 'weapons') return img.category === 'fuzis_e_armas' || img.url.toLowerCase().includes('weapon');
-    if (imageCategoryFilter === 'operators') return img.category === 'operadores' || img.url.toLowerCase().includes('operator') || img.url.toLowerCase().includes('ops');
-    return true;
-  }) || [];
-
-  // Texto bruto filtrado para busca
-  const rawParagraphsFiltered = (article?.paragraphs || []).filter((p) => {
-    if (!rawSearchQuery.trim()) return true;
-    return p.toLowerCase().includes(rawSearchQuery.toLowerCase());
-  });
+  // Filtragem do texto bruto para busca
+  const filteredRawText = article?.fullText
+    ? rawTextSearch.trim()
+      ? article.fullText
+          .split('\n')
+          .filter((line) => line.toLowerCase().includes(rawTextSearch.toLowerCase()))
+          .join('\n')
+      : article.fullText
+    : '';
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* Banner Oficial & Botão de Configuração de APIs */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Módulo Vídeo Longo • Etapa 1
+    <div className="max-w-6xl mx-auto space-y-6 pb-20">
+      {/* CABEÇALHO DO FLUXO COM INDICADOR DE ETAPAS */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md">
+              <Sparkles className="w-5 h-5" />
             </span>
-            <span className="text-xs text-slate-400">• Ingestão Universal de Notícia & Mídias</span>
+            <h1 className="text-xl font-black text-white tracking-tight">
+              Notícia para Vídeo (Fluxo em 2 Telas)
+            </h1>
           </div>
-          <h2 className="text-2xl font-extrabold text-white">Criar Vídeo por Notícia com Gameplay e Avatar</h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            Insira o link de qualquer notícia (games, política, tecnologia ou geral). O sistema extrai estritamente as fotos e vídeos reais do site. Se não houver mídias, o fluxo pausa para você escolher vídeos de fundo gratuitos da internet.
+          <p className="text-xs text-slate-400">
+            {currentScreen === 1 
+              ? 'Tela 1: Configuração da Notícia, Formato, Duração, Avatar e Voz' 
+              : 'Tela 2: Texto Capturado, Mídias da Notícia e Seleção de Vídeo de Fundo'}
           </p>
-
-          {/* Assinatura Cravada do Stanley Alves */}
-          <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-medium">
-            <span>🎙️ Assinatura Cravada:</span>
-            <span className="font-bold text-amber-200">"Fala moçada! Segura o controle / pega a pipoca e vem comigo..."</span>
-          </div>
         </div>
 
-        <div className="shrink-0 flex flex-col gap-2">
+        {/* BORDÃO OFICIAL CRAVADO & GESTÃO DE CHAVES */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Bordão Cravado: "Fala moçada! Segura o controle..."</span>
+          </div>
+
           <button
             type="button"
             onClick={() => setShowApiKeysModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 hover:border-slate-500 text-xs text-slate-200 font-bold flex items-center gap-2 transition-all shadow-md"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-all"
           >
             <Key className="w-3.5 h-3.5 text-amber-400" />
-            <span>Configurar APIs de Mídia</span>
+            <span>Chaves de API</span>
           </button>
-
-          <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
-            <div className="text-[10px] text-slate-400 uppercase font-bold">Armazenamento</div>
-            <div className="text-emerald-400 font-extrabold text-xs mt-0.5">SQLite + Disco Local</div>
-          </div>
         </div>
       </div>
 
-      {/* Painel de Configuração Inicial (Etapa 1: Duração, Vídeo de Fundo e Link) */}
-      <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-5 shadow-xl">
-        {/* 1. SELETOR DE DURAÇÃO ALVO (Até 15 Minutos) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Clock className="w-4 h-4 text-emerald-400" />
-              1. Escolha o Tempo do Vídeo (Até 15 Minutos):
-            </label>
-            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-mono">
-              Tempo Selecionado: {targetDurationMinutes} {targetDurationMinutes === 1 ? 'Minuto' : 'Minutos'}
-            </span>
+      {/* BARRA DE PROGRESSO ENTRE AS 2 TELAS */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setCurrentScreen(1)}
+          className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+            currentScreen === 1
+              ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
+            currentScreen === 1 ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+          }`}>
+            1
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
-            {[
-              { min: 1, label: '1 min', tag: 'Shorts / Reels' },
-              { min: 3, label: '3 min', tag: 'Notícia Rápida' },
-              { min: 5, label: '5 min', tag: 'Padrão YouTube' },
-              { min: 10, label: '10 min', tag: 'Guia Completo' },
-              { min: 15, label: '15 min', tag: 'Dossiê Longo' },
-            ].map((item) => (
-              <button
-                key={item.min}
-                type="button"
-                onClick={() => setTargetDurationMinutes(item.min)}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
-                  targetDurationMinutes === item.min
-                    ? 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-600/30 border-emerald-500'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-                }`}
-              >
-                <div className="text-sm font-extrabold">{item.label}</div>
-                <div className="text-[10px] opacity-80 mt-0.5">{item.tag}</div>
-              </button>
-            ))}
+          <div>
+            <div className="text-xs font-extrabold text-white">Tela 1: Configuração Prévia</div>
+            <div className="text-[11px] text-slate-400">Site, Formato, Tempo, Avatar, Voz e Idioma</div>
           </div>
+        </button>
 
-          <div className="pt-2 flex items-center gap-4">
-            <input
-              type="range"
-              min={1}
-              max={15}
-              step={1}
-              value={targetDurationMinutes}
-              onChange={(e) => setTargetDurationMinutes(Number(e.target.value))}
-              className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-950 rounded-lg"
-            />
-            <span className="text-xs font-mono text-slate-300 shrink-0">{targetDurationMinutes} min</span>
+        <button
+          type="button"
+          onClick={() => {
+            if (article) setCurrentScreen(2);
+            else alert('Você precisa raspar a notícia na Tela 1 primeiro.');
+          }}
+          disabled={!article}
+          className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+            currentScreen === 2
+              ? 'bg-emerald-600/15 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+              : !article
+              ? 'bg-slate-900/50 border-slate-800/50 text-slate-600 cursor-not-allowed'
+              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
+            currentScreen === 2 ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400'
+          }`}>
+            2
           </div>
-        </div>
-
-        {/* 2. SELETOR DE FOCO DO VÍDEO (Sobre o que você quer falar) */}
-        <div className="space-y-2 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-              <Target className="w-4 h-4 text-amber-400" />
-              2. Foco do Roteiro (Sobre o que você quer falar neste vídeo?):
-            </label>
-            <span className="text-[11px] text-slate-400">
-              Gere múltiplos vídeos a partir da mesma matéria!
-            </span>
+          <div>
+            <div className="text-xs font-extrabold text-white">Tela 2: Notícia Capturada & Mídias</div>
+            <div className="text-[11px] text-slate-400">Texto bruto, fotos do site e vídeo de fundo</div>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {[
-              { id: 'weapons' as ThemeFocusType, label: 'Arsenal & Armas', icon: Crosshair, desc: 'Fuzis, SMGs, Snipers, Acessórios Apex' },
-              { id: 'operators' as ThemeFocusType, label: '33 Operadores', icon: Users, desc: 'Skins, Facções e Desbloqueios' },
-              { id: 'equipment' as ThemeFocusType, label: 'Equipamentos', icon: Zap, desc: 'Séries de Baixas, Armeiro e Vantagens' },
-              { id: 'all' as ThemeFocusType, label: 'Matéria Completa', icon: Globe, desc: 'Panorama geral de todo o lançamento' },
-            ].map((f) => {
-              const Icon = f.icon;
-              const isSelected = themeFocus === f.id;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => {
-                    if (article) {
-                      handleRegenerateByFocus(f.id);
-                    } else {
-                      setThemeFocus(f.id);
-                    }
-                  }}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? 'bg-amber-500/15 border-amber-500 text-white shadow-md shadow-amber-500/10'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
-                    <span className="font-extrabold text-xs">{f.label}</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1 leading-snug">{f.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 3. VÍDEO DE FUNDO CONTÍNUO (B-Roll ou Live do @stanleyalvesbr) */}
-        <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block flex items-center gap-2">
-              <Gamepad2 className="w-4 h-4 text-indigo-400" />
-              3. Vídeo de Fundo Contínuo (Live Gamer ou Vídeo de Banco Free):
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                setShowStockModal(true);
-                handleSearchStockVideos();
-              }}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 transition-all"
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>Buscar Vídeos Grátis (Pexels / Pixabay)</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-white block">Fonte Ativa: {brollChannel}</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Vídeo contínuo no fundo (áudio original mutado)</span>
-              </div>
-              <span className="text-[9px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-                Fundo Ativo
-              </span>
-            </div>
-
-            <div>
-              <input
-                type="text"
-                value={brollChannel}
-                onChange={(e) => setBrollChannel(e.target.value)}
-                placeholder="Ex: @stanleyalvesbr ou link de vídeo MP4/YouTube"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 4. LINK DA MATÉRIA (Universal: Jogos, Política, Tecnologia, etc.) */}
-        <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-          <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block flex items-center gap-2">
-            <Link className="w-4 h-4 text-emerald-400" />
-            4. Link da Matéria / Post Oficial (Qualquer Site ou Nicho):
-          </label>
-
-          <div className="relative">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Cole aqui o link do blog ou notícia (ex: Activision, G1, UOL, TechTudo, etc.)..."
-              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 pr-44 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all font-mono"
-            />
-            <button
-              type="button"
-              onClick={handleScrape}
-              disabled={isLoading || !url}
-              className="absolute right-2 top-2 bottom-2 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
-            >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Extraindo ({targetDurationMinutes} min)...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Extrair Notícia & Mídias</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        </button>
       </div>
 
-      {/* PAINEL DE CONTROLE APÓS EXTRAÇÃO */}
-      {article && plan && (
+      {/* ========================================================================= */}
+      {/* ==================== TELA 1: CONFIGURAÇÃO PRÉVIA ======================== */}
+      {/* ========================================================================= */}
+      {currentScreen === 1 && (
         <div className="space-y-6 animate-fadeIn">
-          {/* Alerta de Verificação Estrita de Mídias Reais */}
-          {article.images.length === 0 ? (
-            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="text-xs font-bold text-amber-200 uppercase">
-                  Pausa Inteligente: Nenhuma Imagem/Vídeo Encontrado no Corpo da Notícia
-                </h4>
-                <p className="text-xs text-slate-300 mt-1">
-                  Seguindo a regra de não inventar dados fora do site, o fluxo pausou para que você selecione um vídeo de fundo da internet (via Pexels ou seu canal) antes de compilar o vídeo final.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowStockModal(true)}
-                  className="mt-2.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white flex items-center gap-1.5"
-                >
-                  <Film className="w-3.5 h-3.5" />
-                  <span>Escolher Vídeo de Fundo Gratuito Agora</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-white">
-                  Mídias Estritas da Página: {article.images.length} fotos reais catalogadas com sucesso.
-                </span>
-              </div>
-              <span className="text-[10px] text-slate-400 font-mono">
-                Regra: 0% mídias não autorizadas
-              </span>
-            </div>
-          )}
-
-          {/* Barra de Status da Matéria Extraída */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
-                  Fonte: {article.siteName}
-                </span>
-                <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 uppercase font-bold">
-                  {article.images.length} Fotos Reais
-                </span>
-                <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase font-bold">
-                  {article.sections.length} Tópicos
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300 font-bold">
-                  Foco: <span className="text-amber-400 uppercase">{plan.themeFocus}</span>
-                </span>
-                {isRegeneratingPlan && (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                )}
-              </div>
-            </div>
-
-            <h3 className="font-black text-lg text-white leading-tight">{article.title}</h3>
-            <p className="text-xs text-slate-300">{article.description}</p>
-          </div>
-
-          {/* Galeria de Fotos Reais da Matéria */}
-          {article.images.length > 0 && (
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-indigo-400" />
-                  Galeria da Notícia ({displayedImages.length} fotos de {article.images.length}):
+          {/* CARD PRINCIPAL DA TELA 1 */}
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
+            
+            {/* 1. ESCOLHER O SITE / URL DA NOTÍCIA */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Link className="w-4 h-4 text-indigo-400" />
+                  1. Escolher Site da Notícia (Cole a URL do Blog, Portal ou Notícia):
                 </label>
-
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setImageCategoryFilter('all')}
-                    className={`text-[10px] px-2 py-1 rounded font-bold ${
-                      imageCategoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
+                    onClick={() => setUrl('https://www.callofduty.com/br/pt/blog/2026/10/call-of-duty-modern-warfare-4-launch-multiplayer-operators-weapons-equipment-create-a-class')}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
                   >
-                    Todas ({article.images.length})
+                    Exemplo COD MW4
                   </button>
-                  <span className="text-slate-600">|</span>
+                  <span className="text-slate-600">•</span>
                   <button
                     type="button"
-                    onClick={() => handleSelectAllImages(true)}
-                    className="text-[10px] text-emerald-400 hover:underline"
+                    onClick={() => setUrl('https://g1.globo.com/tecnologia/')}
+                    className="text-[11px] text-slate-400 hover:text-slate-300 font-semibold underline"
                   >
-                    Selecionar Todas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectAllImages(false)}
-                    className="text-[10px] text-rose-400 hover:underline"
-                  >
-                    Limpar
+                    Exemplo Notícia Tech
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 max-h-72 overflow-y-auto p-1 bg-slate-950/60 rounded-xl border border-slate-800">
-                {displayedImages.map((img) => {
-                  const isSelected = selectedImageIds.includes(img.id);
-                  return (
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://exemplo.com/noticia-completa..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
+
+            {/* 2. FORMATO DO VÍDEO (HORIZONTAL OU VERTICAL) & 3. TEMPO DO VÍDEO */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              {/* Formato / Orientação */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Tv className="w-4 h-4 text-sky-400" />
+                  2. Formato do Vídeo:
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setVideoFormat('horizontal')}
+                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 ${
+                      videoFormat === 'horizontal'
+                        ? 'bg-sky-600/20 border-sky-500 text-white shadow-md shadow-sky-500/20'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Tv className={`w-6 h-6 ${videoFormat === 'horizontal' ? 'text-sky-400' : 'text-slate-500'}`} />
+                    <div>
+                      <div className="text-xs font-extrabold">Horizontal (16:9)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">YouTube padrão, monitores e TV</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVideoFormat('vertical')}
+                    className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center gap-2 ${
+                      videoFormat === 'vertical'
+                        ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-500/20'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone className={`w-6 h-6 ${videoFormat === 'vertical' ? 'text-purple-400' : 'text-slate-500'}`} />
+                    <div>
+                      <div className="text-xs font-extrabold">Vertical (9:16)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Shorts, TikTok e Reels</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tempo do Vídeo */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-emerald-400" />
+                    3. Tempo do Vídeo:
+                  </label>
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                    {targetDurationMinutes} {targetDurationMinutes === 1 ? 'Minuto' : 'Minutos'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 3, 5, 10, 15].map((min) => (
                     <button
-                      key={img.id}
+                      key={min}
                       type="button"
-                      onClick={() => toggleImageSelection(img.id)}
-                      className={`relative rounded-lg overflow-hidden border-2 transition-all group aspect-video ${
+                      onClick={() => setTargetDurationMinutes(min)}
+                      className={`py-2.5 rounded-xl border text-center transition-all ${
+                        targetDurationMinutes === min
+                          ? 'bg-emerald-600 text-white font-bold border-emerald-500 shadow-md shadow-emerald-600/30'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">{min}m</div>
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="range"
+                  min={1}
+                  max={15}
+                  step={1}
+                  value={targetDurationMinutes}
+                  onChange={(e) => setTargetDurationMinutes(Number(e.target.value))}
+                  className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-950 rounded-lg mt-2"
+                />
+              </div>
+            </div>
+
+            {/* 4. ESCOLHER AVATAR QUE IREMOS USAR (COM VALIDAÇÃO E PEDIDO PARA CRIAR SE NÃO TIVER) */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <User className="w-4 h-4 text-amber-400" />
+                  4. Avatar que Iremos Usar:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarModal(true)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>+ Cadastrar Novo Avatar</span>
+                </button>
+              </div>
+
+              {/* Grid de Avatares Cadastrados */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {avatarsList.map((av) => {
+                  const isSelected = selectedAvatarId === av.id;
+                  return (
+                    <div
+                      key={av.id}
+                      onClick={() => setSelectedAvatarId(av.id)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
                         isSelected
-                          ? 'border-emerald-500 shadow-md shadow-emerald-500/20'
-                          : 'border-slate-800 opacity-40 hover:opacity-75'
+                          ? 'bg-amber-500/15 border-amber-500 shadow-md shadow-amber-500/15'
+                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       <img
-                        src={img.url}
-                        alt={img.alt}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        src={av.imageUrl}
+                        alt={av.name}
+                        className="w-14 h-14 rounded-xl object-cover border border-slate-700 shrink-0"
                       />
-                      <div
-                        className={`absolute top-1 right-1 w-4 h-4 rounded flex items-center justify-center transition-all ${
-                          isSelected ? 'bg-emerald-500 text-black' : 'bg-black/70 text-transparent'
-                        }`}
-                      >
-                        <Check className="w-3 h-3 stroke-[3]" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-extrabold text-white truncate">{av.name}</h4>
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 ml-1" />}
+                        </div>
+                        <p className="text-[10px] text-slate-400 line-clamp-2 mt-0.5">{av.description}</p>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
             </div>
-          )}
 
-          {/* Abas: 1. Editor de Cenas | 2. Teleprompter | 3. Texto Bruto da Matéria */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setViewTab('scenes_editor')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                    viewTab === 'scenes_editor'
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Editor de Cenas ({plan.scenes.length} Tomadas)</span>
-                </button>
+            {/* 5. VOZ QUE SERÁ USADA (CLONADA LOCAL, STUDIO VOICE, ELEVEN LABS) & 6. IDIOMA */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              {/* Voz */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-rose-400" />
+                  5. Voz que Será Usada:
+                </label>
 
-                <button
-                  type="button"
-                  onClick={() => setViewTab('full_script')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                    viewTab === 'full_script'
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Roteiro Corrido (Teleprompter)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setViewTab('raw_text')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                    viewTab === 'raw_text'
-                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Texto Completo Bruto (Guardado)</span>
-                </button>
-              </div>
-
-              <div className="text-[11px] font-mono text-amber-300 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800 shrink-0">
-                {plan.totalDurationSeconds}s ({Math.round(plan.totalDurationSeconds / 60)} min) • {totalWords} palavras
-              </div>
-            </div>
-
-            {/* ABA 1: Editor de Cenas */}
-            {viewTab === 'scenes_editor' && (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                {plan.scenes.map((scene) => (
-                  <div
-                    key={scene.id}
-                    className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row gap-4 items-start hover:border-slate-700 transition-all"
+                {/* Seleção de Motor de Voz */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEngine('voicestudio_local')}
+                    className={`p-2 rounded-xl border text-center transition-all ${
+                      voiceEngine === 'voicestudio_local'
+                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
                   >
-                    {scene.associatedImageUrl && (
-                      <div className="w-full sm:w-36 aspect-video rounded-lg overflow-hidden border border-slate-800 shrink-0 relative">
-                        <img
-                          src={scene.associatedImageUrl}
-                          alt={scene.heading}
-                          className="w-full h-full object-cover"
-                        />
-                        <span className="absolute bottom-1 left-1 text-[9px] font-bold bg-black/80 text-white px-1.5 py-0.2 rounded uppercase">
-                          {scene.type === 'gameplay_broll' ? 'Fundo Vídeo' : scene.kenBurnsEffect}
-                        </span>
-                      </div>
-                    )}
+                    <div className="text-[11px] font-bold">Voz Clonada</div>
+                    <div className="text-[9px] text-slate-400">VoiceStudio Local</div>
+                  </button>
 
-                    <div className="flex-1 w-full space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-white uppercase tracking-wider">
-                          Cena {scene.order}: {scene.heading}
-                        </span>
-                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                          {scene.durationInSeconds}s • {scene.type === 'gameplay_broll' ? brollChannel : 'Mídia Notícia'}
-                        </span>
-                      </div>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEngine('studio_voice_neural')}
+                    className={`p-2 rounded-xl border text-center transition-all ${
+                      voiceEngine === 'studio_voice_neural'
+                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold">Studio Voice</div>
+                    <div className="text-[9px] text-slate-400">Neural HD</div>
+                  </button>
 
-                      <textarea
-                        rows={2}
-                        value={scene.narration}
-                        onChange={(e) => handleNarrationChange(scene.id, e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition-all resize-none leading-relaxed"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* ABA 2: Roteiro Corrido Teleprompter */}
-            {viewTab === 'full_script' && (
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="text-xs text-slate-400 font-semibold flex items-center justify-between">
-                  <span>Narração completa com o bordão de abertura do apresentador:</span>
-                  <span className="text-emerald-400">{totalWords} palavras estimadas</span>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEngine('eleven_labs')}
+                    className={`p-2 rounded-xl border text-center transition-all ${
+                      voiceEngine === 'eleven_labs'
+                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold">ElevenLabs</div>
+                    <div className="text-[9px] text-slate-400">API Nuvem</div>
+                  </button>
                 </div>
-                <div className="text-xs text-slate-200 leading-relaxed space-y-3 max-h-96 overflow-y-auto font-sans p-3 bg-slate-900/60 rounded-lg">
-                  {plan.scenes.map((s) => (
-                    <p key={s.id}>
-                      <span className="font-bold text-amber-300">[{s.heading}]: </span>
-                      {s.narration}
-                    </p>
+
+                {/* Dropdown de Vozes */}
+                <select
+                  value={selectedVoiceId}
+                  onChange={(e) => setSelectedVoiceId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
+                >
+                  <option value="voice_stanley_official">Minha Voz Oficial (Clonada - Stanley Alves)</option>
+                  {clonedVoices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.engine})
+                    </option>
                   ))}
-                </div>
+                  <option value="voice_doc_dark">Narrador Sombrio (Estilo VOX)</option>
+                  <option value="voice_viral_energetic">Locutor Viral (Shorts / Alta Energia)</option>
+                </select>
               </div>
-            )}
 
-            {/* ABA 3: Texto Completo Bruto (Guardado no Banco/Disco) */}
-            {viewTab === 'raw_text' && (
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">
-                      Base de Conhecimento Bruta:
-                    </span>
-                    <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                      {article.paragraphs.length} parágrafos • {article.fullText.length} caracteres
-                    </span>
-                  </div>
+              {/* Idioma do Vídeo */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Globe2 className="w-4 h-4 text-emerald-400" />
+                  6. Idioma do Vídeo (para Síntese de Áudio):
+                </label>
 
-                  <div className="flex items-center gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { code: 'pt-BR', label: 'Português', flag: '🇧🇷' },
+                    { code: 'en-US', label: 'Inglês', flag: '🇺🇸' },
+                    { code: 'es-ES', label: 'Espanhol', flag: '🇪🇸' },
+                  ].map((lang) => (
                     <button
+                      key={lang.code}
                       type="button"
-                      onClick={handleCopyRawText}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold flex items-center gap-1.5 transition-all"
+                      onClick={() => setLanguage(lang.code)}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                        language === lang.code
+                          ? 'bg-emerald-600/20 border-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
                     >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedRawText ? 'Copiado!' : 'Copiar Texto'}</span>
+                      <span className="text-lg">{lang.flag}</span>
+                      <span className="text-xs">{lang.label}</span>
                     </button>
-
-                    <a
-                      href={`http://localhost:3001/api/news/article/${article.id}/raw-text`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-xs text-white font-bold flex items-center gap-1.5 transition-all"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Baixar .TXT</span>
-                    </a>
-                  </div>
-                </div>
-
-                {/* Campo de Busca dentro do Texto Bruto */}
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={rawSearchQuery}
-                    onChange={(e) => setRawSearchQuery(e.target.value)}
-                    placeholder="Buscar termo no texto bruto..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                {/* Lista de Parágrafos Brutos */}
-                <div className="space-y-2 max-h-96 overflow-y-auto p-3 bg-slate-900/40 rounded-lg font-mono text-[11px] text-slate-300">
-                  {rawParagraphsFiltered.map((p, idx) => (
-                    <div key={idx} className="p-2 rounded bg-slate-950/80 border border-slate-800/80 leading-relaxed">
-                      <span className="text-amber-400/80 font-bold mr-2">#{idx + 1}</span>
-                      {p}
-                    </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Botão de Envio para o Player */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-            <div>
-              <div className="font-extrabold text-sm text-white flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Validar Etapa 1: Notícia e Mídias ({plan.targetDurationMinutes} Minutos)
-              </div>
-              <p className="text-xs text-slate-400">
-                Fundo contínuo ({brollChannel}) + Fotos da notícia em cards menores sobrepostos + Avatar na webcam.
-              </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleApproveAndSendToPlayer}
-              disabled={isCompiling}
-              className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 shrink-0"
-            >
-              {isCompiling ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Compilando...</span>
-                </>
-              ) : compileSuccess ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Aprovado! Abrindo...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Carregar no Player & Testar</span>
-                </>
-              )}
-            </button>
+            {/* BOTÃO PRINCIPAL: RASPAR A NOTÍCIA */}
+            <div className="pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={handleScrapeNews}
+                disabled={isLoadingScrape || !url.trim()}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                {isLoadingScrape ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Raspando Notícia e Mídias Reais da Página...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5" />
+                    <span>Raspar Notícia e Prosseguir para a Tela 2</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
 
-      {/* MODAL 1: BUSCAR VÍDEOS GRATUITOS (PEXELS / PIXABAY) */}
-      {showStockModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Film className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-bold text-white text-base">Banco de Vídeos Gratuitos (Pexels & Pixabay)</h3>
+      {/* ========================================================================= */}
+      {/* ================== TELA 2: TEXTO CAPTURADO & MÍDIAS ===================== */}
+      {/* ========================================================================= */}
+      {currentScreen === 2 && article && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* BARRA SUPERIOR COM BOTÃO DE VOLTAR */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setCurrentScreen(1)}
+              className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← Voltar para Configurações (Tela 1)</span>
+            </button>
+
+            <div className="text-xs text-slate-400">
+              Notícia: <span className="text-white font-bold">{article.siteName}</span> • {article.images.length} fotos reais encontradas
+            </div>
+          </div>
+
+          {/* 1. TEXTO QUE FOI CAPTURADO DA NOTÍCIA */}
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  1. Texto Capturado da Notícia
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-mono line-clamp-1">{article.title}</p>
               </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
+                  {article.fullText ? article.fullText.split(/\s+/).length : 0} palavras
+                </span>
+                <span className="text-xs bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
+                  {article.fullText ? article.fullText.length : 0} caracteres
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyRawText}
+                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{copiedRawText ? 'Copiado!' : 'Copiar Texto'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de Busca no Texto */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={rawTextSearch}
+                onChange={(e) => setRawTextSearch(e.target.value)}
+                placeholder="Filtrar ou pesquisar palavras no texto bruto..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Caixa com o Texto Bruto Completo */}
+            <div className="h-64 overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+              {filteredRawText || 'Nenhum trecho correspondente à busca.'}
+            </div>
+          </div>
+
+          {/* 2. AS IMAGENS / VÍDEOS QUE TEM NA NOTÍCIA */}
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-indigo-400" />
+                  2. Imagens e Vídeos Extraídos da Página ({article.images.length} encontradas)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Fotos reais baixadas diretamente do site oficial. Marque quais deseja manter ativas:
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectAllImages(true)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold"
+                >
+                  Selecionar Todas
+                </button>
+                <span className="text-slate-600">•</span>
+                <button
+                  type="button"
+                  onClick={() => handleSelectAllImages(false)}
+                  className="text-xs text-slate-400 hover:text-slate-300 font-bold"
+                >
+                  Desmarcar Todas
+                </button>
+              </div>
+            </div>
+
+            {article.images.length === 0 ? (
+              <div className="p-6 rounded-xl bg-amber-950/20 border border-amber-500/30 text-center">
+                <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+                <h4 className="text-xs font-bold text-amber-200">Nenhuma imagem encontrada no corpo da página</h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  Como não há fotos na notícia, o vídeo de fundo contínuo abaixo será usado para preencher a tela.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 max-h-96 overflow-y-auto p-1">
+                {article.images.map((img) => {
+                  const isChecked = selectedImageIds.includes(img.id);
+                  return (
+                    <div
+                      key={img.id}
+                      onClick={() => toggleImageSelection(img.id)}
+                      className={`group relative rounded-xl overflow-hidden border cursor-pointer transition-all ${
+                        isChecked
+                          ? 'border-indigo-500 shadow-md shadow-indigo-500/20 ring-2 ring-indigo-500/30'
+                          : 'border-slate-800 opacity-50 hover:opacity-100'
+                      }`}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.alt || 'Foto da notícia'}
+                        className="w-full h-24 object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-slate-950/80 backdrop-blur-sm border border-slate-700 flex items-center justify-center">
+                        {isChecked && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 3. ESCOLHA DO VÍDEO DE FUNDO (SE TIVER SOMENTE IMAGENS OU LINK DO CANAL) */}
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <Gamepad2 className="w-4 h-4 text-purple-400" />
+                  3. Vídeo de Fundo Contínuo (B-Roll Gamer / Live do Canal / Bancos Free)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Como a notícia possui fotos estáticas, um vídeo contínuo passará no fundo enquanto as fotos e o avatar surgem na tela.
+                </p>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setShowStockModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                onClick={() => {
+                  setShowStockModal(true);
+                  handleSearchStockVideos();
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/30 shrink-0"
+              >
+                <Film className="w-3.5 h-3.5" />
+                <span>Buscar Vídeo Grátis (Pexels / Pixabay)</span>
+              </button>
+            </div>
+
+            {/* Input para Colocar Link de Vídeo (ex: YouTube Live do Stanley ou MP4) */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">
+                Colar Link de Vídeo Próprio (YouTube / MP4 / Canal):
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={brollVideoSource}
+                  onChange={(e) => setBrollVideoSource(e.target.value)}
+                  placeholder="Ex: @stanleyalvesbr ou https://youtube.com/live/... ou link direto de vídeo"
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBrollVideoSource('@stanleyalvesbr')}
+                  className="px-3 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold whitespace-nowrap"
+                >
+                  Usar Meu Canal (@stanleyalvesbr)
+                </button>
+              </div>
+
+              {selectedStockVideo && (
+                <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/30 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selectedStockVideo.previewUrl}
+                      alt={selectedStockVideo.title}
+                      className="w-16 h-10 rounded-lg object-cover border border-purple-500/40"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-white block">{selectedStockVideo.title}</span>
+                      <span className="text-[10px] text-purple-300">Fonte: {selectedStockVideo.source.toUpperCase()} ({selectedStockVideo.duration}s)</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStockVideo(null)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* BOX DE CONCLUSÃO DA ETAPA ATÉ AQUI (AGUARDANDO PRÓXIMAS INSTRUÇÕES DO STANLEY) */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-indigo-500/30 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                Fluxo Configurado com Sucesso até a Tela 2!
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                A notícia e suas mídias foram capturadas e o vídeo de fundo está vinculado. Aguardando suas próximas instruções para avançar!
+              </p>
+            </div>
+
+            <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Etapas 1 e 2 Alinhadas</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ===================== MODAL DE CADASTRAR NOVO AVATAR ===================== */}
+      {/* ========================================================================= */}
+      {showAvatarModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <User className="w-4 h-4 text-amber-400" />
+                Cadastrar Novo Avatar
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAvatarModal(false);
+                  setAvatarErrorAlert(false);
+                }}
+                className="text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Campo de Busca */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+            {avatarErrorAlert && (
+              <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 flex items-center gap-2 text-xs text-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Para prosseguir, você deve selecionar ou criar um avatar.</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateAvatar} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Nome do Avatar:</label>
                 <input
                   type="text"
-                  value={stockSearchQuery}
-                  onChange={(e) => setStockSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearchStockVideos()}
-                  placeholder="Pesquisar vídeo de fundo (ex: gaming, call of duty, tecnologia, cidade)..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  required
+                  value={newAvatarName}
+                  onChange={(e) => setNewAvatarName(e.target.value)}
+                  placeholder="Ex: Stanley Alves (Camisa Preta / Estúdio)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">URL da Imagem / Foto do Avatar:</label>
+                <input
+                  type="text"
+                  value={newAvatarUrl}
+                  onChange={(e) => setNewAvatarUrl(e.target.value)}
+                  placeholder="http://localhost:3001/storage/avatars/minha_foto.jpg"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Se deixar vazio, usará a foto de webcam padrão do Stanley.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-md shadow-amber-600/30"
+                >
+                  Salvar e Selecionar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ===================== MODAL DE BUSCA DE STOCK VIDEOS ===================== */}
+      {/* ========================================================================= */}
+      {showStockModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <Film className="w-4 h-4 text-purple-400" />
+                Banco de Vídeos Gratuitos (Pexels & Pixabay)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowStockModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={stockSearchQuery}
+                onChange={(e) => setStockSearchQuery(e.target.value)}
+                placeholder="Pesquisar por tema (ex: gameplay, tech, war, city)..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchStockVideos()}
+              />
               <button
                 type="button"
                 onClick={handleSearchStockVideos}
                 disabled={isSearchingStock}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shrink-0"
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5"
               >
                 {isSearchingStock ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                 <span>Buscar</span>
               </button>
             </div>
 
-            {/* Resultados de Vídeos */}
-            <div className="space-y-2">
-              <div className="text-[11px] text-slate-400">
-                {stockVideos.length > 0 ? `${stockVideos.length} vídeos gratuitos encontrados:` : 'Nenhum vídeo carregado. Faça uma busca ou cadastre sua chave de API.'}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto p-1">
-                {stockVideos.map((vid) => (
+            <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+              {stockVideos.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-xs text-slate-500">
+                  {isSearchingStock ? 'Buscando vídeos no Pexels e Pixabay...' : 'Nenhum vídeo encontrado. Digite um termo e clique em Buscar.'}
+                </div>
+              ) : (
+                stockVideos.map((vid) => (
                   <div
                     key={vid.id}
-                    className="relative group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 hover:border-indigo-500 transition-all flex flex-col"
+                    className="p-2 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between group hover:border-purple-500 transition-all"
                   >
-                    <div className="aspect-video w-full overflow-hidden relative">
-                      <img src={vid.previewUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                      <span className="absolute bottom-1 right-1 text-[9px] bg-black/80 text-white px-1.5 py-0.5 rounded font-mono">
+                    <div className="relative rounded-lg overflow-hidden">
+                      <img
+                        src={vid.previewUrl}
+                        alt={vid.title}
+                        className="w-full h-24 object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] text-white px-1.5 py-0.5 rounded font-mono">
                         {vid.duration}s
                       </span>
-                      <span className="absolute top-1 left-1 text-[9px] bg-indigo-600/90 text-white px-1.5 py-0.5 rounded uppercase font-bold">
-                        {vid.source}
-                      </span>
                     </div>
 
-                    <div className="p-2 space-y-1.5 flex-1 flex flex-col justify-between">
-                      <div className="text-[10px] text-slate-300 font-semibold line-clamp-1">{vid.title}</div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBrollChannel(vid.videoUrl || vid.previewUrl);
-                          setShowStockModal(false);
-                        }}
-                        className="w-full py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all text-center"
-                      >
-                        Usar Como Fundo
-                      </button>
+                    <div className="mt-2">
+                      <h5 className="text-[11px] font-bold text-white truncate">{vid.title}</h5>
+                      <span className="text-[9px] text-purple-400 uppercase font-mono">{vid.source}</span>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStockVideo(vid);
+                        setBrollVideoSource(vid.videoUrl);
+                        setShowStockModal(false);
+                      }}
+                      className="mt-2 w-full py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 hover:border-purple-500 text-[11px] font-bold text-purple-300 hover:text-white transition-all"
+                    >
+                      Usar Este Vídeo de Fundo
+                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span>Vídeos 100% gratuitos com licença de uso comercial.</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowStockModal(false);
-                  setShowApiKeysModal(true);
-                }}
-                className="text-indigo-400 hover:underline font-bold"
-              >
-                Configurar Chaves Pexels / Pixabay
-              </button>
+                ))
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: CONFIGURAR CHAVES DE API (PEXELS, PIXABAY, HEYGEN, REPLICATE) */}
+      {/* ========================================================================= */}
+      {/* ===================== MODAL DE GESTÃO DE CHAVES DE API =================== */}
+      {/* ========================================================================= */}
       {showApiKeysModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Chaves de APIs (Mídia & Lip-Sync)</h3>
-              </div>
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-amber-400" />
+                Gerenciar Chaves de API (Pexels, Pixabay, HeyGen, Replicate)
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowApiKeysModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Cadastre suas chaves para habilitar buscas gratuitas de vídeos de fundo e a renderização do avatar falante. As chaves são guardadas localmente no seu computador.
-            </p>
+            {saveKeysSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Chaves salvas com sucesso em storage/api_keys.json!</span>
+              </div>
+            )}
 
             <div className="space-y-3">
-              {/* Pexels API Key */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span>Pexels API Key (Vídeos Grátis)</span>
-                    {apiKeysStatus.hasPexels && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </label>
-                  <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5">
-                    <span>Criar Grátis</span> <ExternalLink className="w-2.5 h-2.5" />
+              <div>
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
+                  <span>Pexels API Key (Vídeos Gratuitos):</span>
+                  <a
+                    href="https://www.pexels.com/api/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-indigo-400 hover:underline"
+                  >
+                    Obter Chave Grátis
                   </a>
-                </div>
+                </label>
                 <input
                   type="password"
                   value={formKeys.pexelsApiKey}
                   onChange={(e) => setFormKeys({ ...formKeys, pexelsApiKey: e.target.value })}
-                  placeholder={apiKeysStatus.keys?.pexelsApiKey || 'Cole sua chave Pexels aqui...'}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="Cole sua API Key do Pexels..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              {/* Pixabay API Key */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span>Pixabay API Key (Vídeos Grátis)</span>
-                    {apiKeysStatus.hasPixabay && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </label>
-                  <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5">
-                    <span>Criar Grátis</span> <ExternalLink className="w-2.5 h-2.5" />
+              <div>
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
+                  <span>Pixabay API Key (Vídeos Gratuitos):</span>
+                  <a
+                    href="https://pixabay.com/api/docs/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-indigo-400 hover:underline"
+                  >
+                    Obter Chave Grátis
                   </a>
-                </div>
+                </label>
                 <input
                   type="password"
                   value={formKeys.pixabayApiKey}
                   onChange={(e) => setFormKeys({ ...formKeys, pixabayApiKey: e.target.value })}
-                  placeholder={apiKeysStatus.keys?.pixabayApiKey || 'Cole sua chave Pixabay aqui...'}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="Cole sua API Key do Pixabay..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              {/* HeyGen API Key */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span>HeyGen API Key (Opção Lip-Sync A)</span>
-                    {apiKeysStatus.hasHeygen && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </label>
-                  <a href="https://app.heygen.com/settings?nav=API" target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5">
-                    <span>Painel HeyGen</span> <ExternalLink className="w-2.5 h-2.5" />
+              <div>
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
+                  <span>HeyGen API Key (Talking Head Lip-Sync):</span>
+                  <a
+                    href="https://app.heygen.com/settings?nav=API"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-indigo-400 hover:underline"
+                  >
+                    Obter Chave HeyGen
                   </a>
-                </div>
+                </label>
                 <input
                   type="password"
                   value={formKeys.heygenApiKey}
                   onChange={(e) => setFormKeys({ ...formKeys, heygenApiKey: e.target.value })}
-                  placeholder={apiKeysStatus.keys?.heygenApiKey || 'Cole sua chave HeyGen aqui...'}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="Cole sua API Key do HeyGen..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              {/* Replicate Token (LatentSync) */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span>Replicate API Token (Opção Lip-Sync B: LatentSync)</span>
-                    {apiKeysStatus.hasReplicate && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </label>
-                  <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5">
-                    <span>Tokens Replicate</span> <ExternalLink className="w-2.5 h-2.5" />
+              <div>
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between mb-1">
+                  <span>Replicate API Token (LatentSync ByteDance):</span>
+                  <a
+                    href="https://replicate.com/account/api-tokens"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-indigo-400 hover:underline"
+                  >
+                    Obter Token Replicate
                   </a>
-                </div>
+                </label>
                 <input
                   type="password"
                   value={formKeys.replicateApiToken}
                   onChange={(e) => setFormKeys({ ...formKeys, replicateApiToken: e.target.value })}
-                  placeholder={apiKeysStatus.keys?.replicateApiToken || 'r8_...'}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="r8_..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-              {saveKeysSuccess ? (
-                <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                  <Check className="w-4 h-4" /> Chaves salvas com sucesso!
-                </span>
-              ) : (
-                <span className="text-[11px] text-slate-500">Salvo em storage/api_keys.json</span>
-              )}
-
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowApiKeysModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+              >
+                Fechar
+              </button>
               <button
                 type="button"
                 onClick={handleSaveApiKeys}
                 disabled={isSavingKeys}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/30"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
               >
-                {isSavingKeys ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                <span>Salvar Chaves</span>
+                {isSavingKeys && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Salvar Configurações</span>
               </button>
             </div>
           </div>

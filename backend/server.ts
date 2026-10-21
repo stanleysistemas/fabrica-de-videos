@@ -168,6 +168,43 @@ app.post('/api/stock-videos/keys', async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || 'Falha ao salvar chaves' });
   }
 });
+// Endpoint: Listar Todas as Chaves de API Configuradas com Metadados
+app.get('/api/settings/api-keys', async (req: Request, res: Response) => {
+  try {
+    const { apiKeyService } = await import('./services/apiKeyService');
+    const apis = apiKeyService.getAllKeys();
+    res.json({ success: true, apis });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao consultar chaves de API' });
+  }
+});
+
+// Endpoint: Gravar/Atualizar Chave de API Específica com Status de Principal
+app.post('/api/settings/api-keys', async (req: Request, res: Response) => {
+  try {
+    const { id, key, isPrimary } = req.body;
+    if (!id) {
+      return res.status(400).json({ error: 'ID da API é obrigatório' });
+    }
+    const { apiKeyService } = await import('./services/apiKeyService');
+    const updatedApis = apiKeyService.saveKey(id, key || '', Boolean(isPrimary));
+    res.json({ success: true, message: 'Chave gravada com sucesso!', apis: updatedApis });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao gravar chave de API' });
+  }
+});
+
+// Endpoint: Excluir/Limpar Chave de API
+app.delete('/api/settings/api-keys/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { apiKeyService } = await import('./services/apiKeyService');
+    const updatedApis = apiKeyService.deleteKey(id);
+    res.json({ success: true, message: 'Chave removida com sucesso!', apis: updatedApis });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao remover chave de API' });
+  }
+});
 
 // Endpoint: Detecção e status de Hardware (GPU NVIDIA CUDA / CPU GGUF)
 app.get('/api/hardware/detect', async (req: Request, res: Response) => {
