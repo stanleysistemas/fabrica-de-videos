@@ -80,14 +80,27 @@ Temos duas abordagens técnicas para gerar a animação:
 - **Kling AI (Lip-Sync API):**
   - Gera animação corporal e facial sincronizada com fala.
 
-#### Abordagem B: Rota 100% Local no seu Computador (Open-Source / Sem Custo por Minuto)
-Se você preferir rodar tudo localmente no seu computador sem depender de chaves de API:
-1. **LivePortrait (Kuaishou - Open Source):**
-   - O melhor modelo open-source atual para retratos falantes.
-   - Consegue animar fotos estáticas preservando barba, cabelo, iluminação neon e detalhes finos sem distorções no fundo.
-2. **SadTalker + GFPGAN:**
-   - Gera pose de cabeça 3D, piscadas e fala a partir de uma única foto e um arquivo de voz.
-   - Aplica o restaurador facial GFPGAN para manter os dentes e lábios nítidos.
+#### Abordagem B: Rota 100% Local / Open-Source (LatentSync da ByteDance)
+Analisamos o repositório local presente em seu workspace: **`E:\SISTEMAS\CRIAR VIDEOS\LatentSync\`**:
+
+1. **O que é o LatentSync:**
+   - É o modelo de última geração da **ByteDance** (criadores do TikTok), baseado em **Latent Diffusion (U-Net do Stable Diffusion)** com embeddings de áudio do **Whisper**.
+   - Diferente dos modelos legados como Wav2Lip (que geravam boca borrada e recortada), o LatentSync sintetiza a boca e os dentes diretamente no espaço latente em alta resolução (**512 x 512** no v1.6), gerando um lip-sync cinematográfico idêntico ao de grandes estúdios.
+2. **Como o LatentSync transforma a imagem estática no vídeo animado:**
+   - O LatentSync espera um **vídeo de base** (`--video_path`) + um **áudio falado** (`--audio_path`).
+   - Para transformar a sua foto estática em vídeo pelo LatentSync:
+     1. O FFmpeg transforma a imagem do seu estúdio em um vídeo base contínuo (ex: 10s ou 60s a 25 fps).
+     2. O LatentSync recebe o vídeo base e o arquivo de áudio (`.wav`).
+     3. O U-Net detecta o rosto via InsightFace e substitui a região dos lábios pelo movimento sincronizado gerado pela difusão latente do Whisper.
+3. **Requisitos Técnicos para Executar o LatentSync:**
+   - **Pesos Pré-treinados (Checkpoints do HuggingFace):**
+     - `latentsync_unet.pt` (rede U-Net treinada pela ByteDance).
+     - `whisper/tiny.pt` (extrator de fonemas de áudio).
+   - **Consumo de Memória de Vídeo (VRAM):**
+     - Versão 1.5: Requer **8 GB de VRAM** (GPU NVIDIA CUDA).
+     - Versão 1.6 (512x512): Requer **18 GB de VRAM** (GPUs como RTX 3090 / 4090).
+   - **Alternativa Híbrida sem GPU dedicada local:**
+     - O LatentSync já possui endpoint pronto no **Replicate** (`replicate.com/lucataco/latentsync`), permitindo rodar em servidores em nuvem por centavos de dólar e retornar o `.mp4` em segundos, sem consumir a CPU/RAM do seu computador.
 
 ---
 
@@ -95,7 +108,7 @@ Se você preferir rodar tudo localmente no seu computador sem depender de chaves
 Para que o processo seja executado com 1 clique dentro do painel web:
 1. O criador digita o roteiro ou usa a notícia raspada.
 2. O sistema gera o áudio da voz da cena.
-3. O sistema envia a foto `avatar_stanley_setup.jpg` + o áudio para o motor (Hedra API ou LivePortrait local).
+3. O sistema envia a foto `avatar_stanley_setup.jpg` + o áudio para o motor (LatentSync / Hedra).
 4. O motor retorna o vídeo `avatar_falando.mp4`.
 5. O Remotion compila automaticamente o vídeo do avatar com a gameplay do canal `@stanleyalvesbr` e os cortes da matéria, entregando o vídeo completo de 1 a 15 minutos pronto para download ou publicação no YouTube.
 
@@ -105,8 +118,8 @@ Para que o processo seja executado com 1 clique dentro do painel web:
 
 Para quando você desejar implementar essa funcionalidade, basta escolher:
 1. **Qual motor de animação prefere priorizar:**
-   - *Via API (Hedra / HeyGen)*: Qualidade idêntica ao `generated_video.mp4`, ultrarrápido (poucos segundos), exige chave de API do serviço.
-   - *Via Motor Local (LivePortrait / SadTalker)*: 100% gratuito e privado, mas exige execução no processador Intel i5 / DirectML.
+   - *Via LatentSync (ByteDance)*: Modelo já presente no seu disco (`E:\SISTEMAS\CRIAR VIDEOS\LatentSync`), com qualidade de difusão cinematográfica (512x512).
+   - *Via API (Hedra / HeyGen)*: Qualidade idêntica ao `generated_video.mp4`, ultrarrápido (poucos segundos).
 2. **Qual voz você prefere para o teste inicial:**
    - Enviar um áudio curto gravado por você no WhatsApp ou microfone para clonarmos a sua voz real no `VoiceStudio`.
    - Ou usar a voz neural padrão brasileira do sistema.
