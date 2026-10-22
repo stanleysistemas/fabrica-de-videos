@@ -441,11 +441,19 @@ export const NewsToVideoView: React.FC = () => {
           elevenlabsMessage: data.elevenlabsMessage,
         });
 
-        // Seleciona a primeira voz disponível caso ainda não haja selecionada
-        if (voiceEngine === 'elevenlabs' && data.elevenlabs?.length > 0 && !selectedVoiceId) {
-          setSelectedVoiceId(data.elevenlabs[0].id);
-        } else if (voiceEngine === 'voicestudio_local' && data.voicestudio?.length > 0 && !selectedVoiceId) {
-          setSelectedVoiceId(data.voicestudio[0].id);
+        // Seleciona prioritariamente qualquer voz clonada se existir
+        const pickDefaultVoice = (list: VoiceItem[]) => {
+          if (!list || list.length === 0) return '';
+          const cloned = list.find(
+            (v) => v.isCloned || v.name.toLowerCase().includes('clonad') || v.name.toLowerCase().includes('stanley')
+          );
+          return cloned ? cloned.id : list[0].id;
+        };
+
+        if (voiceEngine === 'elevenlabs' && data.elevenlabs?.length > 0) {
+          setSelectedVoiceId(pickDefaultVoice(data.elevenlabs));
+        } else if (voiceEngine === 'voicestudio_local' && data.voicestudio?.length > 0) {
+          setSelectedVoiceId(pickDefaultVoice(data.voicestudio));
         }
       }
     } catch (err) {
@@ -461,11 +469,14 @@ export const NewsToVideoView: React.FC = () => {
     loadOutroPresets();
   }, []);
 
-  // Quando troca o motor de voz (VoiceStudio vs ElevenLabs), atualiza a voz selecionada
+  // Quando troca o motor de voz (VoiceStudio vs ElevenLabs), seleciona prioritariamente a voz clonada
   useEffect(() => {
     const activeList = voiceEngine === 'voicestudio_local' ? voiceCatalog.voicestudio : voiceCatalog.elevenlabs;
     if (activeList.length > 0) {
-      setSelectedVoiceId(activeList[0].id);
+      const cloned = activeList.find(
+        (v) => v.isCloned || v.name.toLowerCase().includes('clonad') || v.name.toLowerCase().includes('stanley')
+      );
+      setSelectedVoiceId(cloned ? cloned.id : activeList[0].id);
     } else {
       setSelectedVoiceId('');
     }
@@ -845,7 +856,45 @@ export const NewsToVideoView: React.FC = () => {
     updated.forEach((s, idx) => {
       s.order = idx + 1;
     });
+  };
+
+  // 2.1 Reordenar EXCLUSIVAMENTE a Imagem (Mover apenas a foto para a cena de cima ou de baixo, mantendo o texto da história no lugar)
+  const handleMoveSceneImage = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === scenes.length - 1) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...scenes];
+    
+    // Troca apenas as imagens entre as duas cenas
+    const tempUrl = updated[index].associatedImageUrl;
+    const tempId = updated[index].associatedImageId;
+
+    updated[index].associatedImageUrl = updated[targetIndex].associatedImageUrl;
+    updated[index].associatedImageId = updated[targetIndex].associatedImageId;
+
+    updated[targetIndex].associatedImageUrl = tempUrl;
+    updated[targetIndex].associatedImageId = tempId;
+
     setScenes(updated);
+  };
+
+  // 2.2 Upload de Imagem do Computador para a Cena
+  const handleUploadImageForScene = (sceneId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultBase64 = reader.result as string;
+      setScenes((prev) =>
+        prev.map((s) =>
+          s.id === sceneId
+            ? { ...s, associatedImageUrl: resultBase64, associatedImageId: `custom_upload_${Date.now()}` }
+            : s
+        )
+      );
+    };
+    reader.readAsDataURL(file);
   };
 
   // 3. Atualizar Fala da Cena e Recalcular Duração
@@ -2172,28 +2221,6 @@ export const NewsToVideoView: React.FC = () => {
                         ⏱️ ~{scene.durationInSeconds}s ({scene.narration.trim().split(/\s+/).filter(Boolean).length} palavras)
                       </span>
                     </div>
-
-                    {/* BOTÕES DE REORDENAÇÃO (SUBIR / DESCER) */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveScene(index, 'up')}
-                        disabled={index === 0}
-                        title="Mover esta cena para cima"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
-                      >
-                        <ArrowUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveScene(index, 'down')}
-                        disabled={index === scenes.length - 1}
-                        title="Mover esta cena para baixo"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
-                      >
-                        <ArrowDown className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
 
                   {/* CORPO PRINCIPAL DA CENA (2 COLUNAS: MÍDIA VISUAL + NARRAÇÃO EDITÁVEL) */}
@@ -2203,13 +2230,16 @@ export const NewsToVideoView: React.FC = () => {
                     <div className="md:col-span-4 space-y-2.5">
                       <div className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-slate-950 flex items-center justify-center group shadow-inner">
                         {hasLipSyncVideo ? (
-                          <div className="w-full h-full relative">
-                            <img
-                              src={scene.lipSyncVideoUrl || scene.associatedImageUrl || avatarsList[0]?.imageUrl}
-                              alt="Avatar com Lip-Sync"
+                          <div className="w-full h-full relative bg-black">
+                            <video
+                              controls
+                              autoPlay
+                              loop
+                              playsInline
+                              src={scene.lipSyncVideoUrl || lipSyncData?.videoUrl}
                               className="w-full h-full object-cover"
                             />
-                            <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md">
+                            <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md z-10 pointer-events-none">
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Lip-Sync Ativo</span>
                             </div>
@@ -2228,48 +2258,96 @@ export const NewsToVideoView: React.FC = () => {
                         )}
 
                         {/* Tag de Layout de Câmera */}
-                        <div className="absolute bottom-2 left-2 right-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1 text-[10px] text-slate-200 border border-slate-700/80 flex items-center justify-between">
-                          <span className="font-bold flex items-center gap-1">
-                            <Camera className="w-3 h-3 text-amber-400" />
-                            {isIntro || isOutro ? 'Tela Cheia (Estúdio)' : 'Webcam Gamer no Canto'}
-                          </span>
-                          <span className="text-slate-400">{scene.kenBurnsEffect.replace('_', ' ')}</span>
+                        {!hasLipSyncVideo && (
+                          <div className="absolute bottom-2 left-2 right-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1 text-[10px] text-slate-200 border border-slate-700/80 flex items-center justify-between">
+                            <span className="font-bold flex items-center gap-1">
+                              <Camera className="w-3 h-3 text-amber-400" />
+                              {isIntro || isOutro ? 'Tela Cheia (Estúdio)' : 'Webcam Gamer no Canto'}
+                            </span>
+                            <span className="text-slate-400">{scene.kenBurnsEffect.replace('_', ' ')}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CONTROLES DE IMAGEM DEDICADOS (MOVER APENAS A FOTO SEM MEXER NO TEXTO) */}
+                      <div className="space-y-1.5 bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
+                          <span>Posição da Imagem:</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveSceneImage(index, 'up')}
+                              disabled={index === 0}
+                              title="Mover apenas esta foto para a cena anterior (mantém o texto no lugar)"
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                              <span>Subir Foto</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveSceneImage(index, 'down')}
+                              disabled={index === scenes.length - 1}
+                              title="Mover apenas esta foto para a próxima cena (mantém o texto no lugar)"
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                            >
+                              <ArrowDown className="w-3 h-3" />
+                              <span>Descer Foto</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Botões de Troca de Imagem e Upload */}
+                        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-800/80">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetSceneIdForImagePicker(scene.id);
+                              setShowImagePickerModal(true);
+                            }}
+                            className="w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <ImageIcon className="w-3 h-3 text-indigo-400" />
+                            <span>Trocar Foto</span>
+                          </button>
+
+                          <label className="w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                            <Upload className="w-3 h-3 text-emerald-400" />
+                            <span>Upload do PC</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleUploadImageForScene(scene.id, e)}
+                            />
+                          </label>
                         </div>
                       </div>
 
-                      {/* Botões de Ação na Mídia da Cena */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetSceneIdForImagePicker(scene.id);
-                            setShowImagePickerModal(true);
-                          }}
-                          className="w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          <ImageIcon className="w-3 h-3 text-indigo-400" />
-                          <span>Trocar Foto</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateSceneLipSync(scene)}
-                          disabled={isLipSyncLoading}
-                          className="w-full py-1.5 px-2.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          {isLipSyncLoading ? (
-                            <>
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                              <span>Sincronizando...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Video className="w-3 h-3 text-purple-400" />
-                              <span>Gerar Lip-Sync</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
+                      {/* Botão de Lip-Sync desta Cena */}
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateSceneLipSync(scene)}
+                        disabled={isLipSyncLoading}
+                        className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                      >
+                        {isLipSyncLoading ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Sincronizando Lip-Sync...</span>
+                          </>
+                        ) : hasLipSyncVideo ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Regerar Lip-Sync Desta Cena</span>
+                          </>
+                        ) : (
+                          <>
+                            <Video className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Gerar Lip-Sync Desta Cena</span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     {/* COLUNA 2: NARRAÇÃO EDITÁVEL & CONTROLES DE ÁUDIO (md:col-span-8) */}
@@ -2396,6 +2474,27 @@ export const NewsToVideoView: React.FC = () => {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Opção de Enviar Imagem do Computador */}
+            <div className="p-3 bg-slate-950 rounded-xl border border-dashed border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-xs text-slate-300">Prefere usar uma foto ou arte salva no seu computador?</span>
+              <label className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20 shrink-0">
+                <Upload className="w-3.5 h-3.5" />
+                <span>Subir Foto do PC</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (targetSceneIdForImagePicker) {
+                      handleUploadImageForScene(targetSceneIdForImagePicker, e);
+                      setShowImagePickerModal(false);
+                      setTargetSceneIdForImagePicker(null);
+                    }
+                  }}
+                />
+              </label>
             </div>
 
             {/* Grid de Fotos Disponíveis */}
