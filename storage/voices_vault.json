@@ -1,10 +1,10 @@
 [
   {
     "id": "voice_vs_1792608137918",
-    "name": "Stsnley Alves",
+    "name": "Stanley Alves",
     "engine": "voicestudio_local",
     "tone": "grave",
-    "description": "Voz Parão para o Canal",
+    "description": "Voz Padrão para o Canal (Clonada)",
     "sampleAudioPath": "E:\\SISTEMAS\\CRIAR VIDEOS\\saas_videos\\storage\\audio_samples\\voice_vs_1792608137918_sample.wav",
     "accelerationMode": "cpu_gguf",
     "createdAt": "2026-10-21T18:42:17.934Z"

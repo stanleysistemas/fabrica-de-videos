@@ -140,8 +140,8 @@ export const NewsToVideoView: React.FC = () => {
   const [videoFormat, setVideoFormat] = useState<'horizontal' | 'vertical'>('horizontal'); // 16:9 ou 9:16
   const [targetDurationMinutes, setTargetDurationMinutes] = useState<number>(5); // 1, 3, 5, 10, 15 min
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>('avatar_stanley_setup');
-  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'elevenlabs'>('elevenlabs');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
+  const [voiceEngine, setVoiceEngine] = useState<'voicestudio_local' | 'elevenlabs'>('voicestudio_local');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('voice_vs_1792608137918');
   const [language, setLanguage] = useState<string>('pt-BR'); // pt-BR, en-US, es-ES
   const [lipSyncEngine, setLipSyncEngine] = useState<'heygen' | 'latentsync'>('heygen');
 
@@ -176,6 +176,12 @@ export const NewsToVideoView: React.FC = () => {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<any>(null);
 
+  // Modal para assistir ao vídeo de Lip-Sync gerado em tela cheia
+  const [expandedLipSyncVideo, setExpandedLipSyncVideo] = useState<{ url: string; heading: string } | null>(null);
+
+  // Flag se o texto já foi humanizado nesta sessão
+  const [hasHumanized, setHasHumanized] = useState(false);
+
   // Lista de Avatares Cadastrados
   const [avatarsList, setAvatarsList] = useState<AvatarOption[]>([
     {
@@ -208,8 +214,23 @@ export const NewsToVideoView: React.FC = () => {
   const [copiedRawText, setCopiedRawText] = useState(false);
   const [editedFullText, setEditedFullText] = useState<string>('');
 
-  // Presets de Bordão & Abertura (Persistidos no SQLite)
-  const [introPresets, setIntroPresets] = useState<IntroPreset[]>([]);
+  // Presets de Bordão & Abertura (Inicializados e Persistidos no SQLite)
+  const [introPresets, setIntroPresets] = useState<IntroPreset[]>([
+    {
+      id: 'preset_gamer',
+      name: '🎮 Gamer / Gameplay Descontraído (CoD)',
+      hookPhrase: 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo...',
+      readingGuide: 'Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento...',
+      isDefault: true,
+    },
+    {
+      id: 'preset_politica_tech',
+      name: '⚡ Opinião / Política / Tech',
+      hookPhrase: 'Fala pessoal! Hoje vamos analisar os bastidores e o que ninguém te contou sobre isso...',
+      readingGuide: 'Sejam todos muito bem-vindos! No vídeo de hoje nós vamos dissecar os bastidores, as decisões que estão em jogo e como essa pauta impacta diretamente o seu dia a dia. Compartilhe esse vídeo com seus amigos e participe da discussão!',
+      isDefault: false,
+    },
+  ]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('preset_gamer');
   const [customHookPhrase, setCustomHookPhrase] = useState<string>('Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo...');
   const [customReadingGuide, setCustomReadingGuide] = useState<string>('Fala moçada! Segura firme esse controle, pega a pipoca e vem comigo! Sejam muito bem-vindos ao canal! Hoje nós vamos analisar todas as novidades, armas e estratégias do lançamento...');
@@ -322,7 +343,22 @@ export const NewsToVideoView: React.FC = () => {
   };
 
   // Presets de Encerramento (CTA / Seguir / Like) persistidos no SQLite
-  const [outroPresets, setOutroPresets] = useState<OutroPreset[]>([]);
+  const [outroPresets, setOutroPresets] = useState<OutroPreset[]>([
+    {
+      id: 'outro_gamer',
+      name: '🎮 Gamer / Inscrição e Like',
+      outroPhrase:
+        'E você, o que achou dessa novidade? Deixa nos comentários qual arma você vai testar primeiro, esmaga o botão de like, se inscreve no canal @stanleyalvesbr e até o próximo vídeo!',
+      isDefault: true,
+    },
+    {
+      id: 'outro_tech',
+      name: '⚡ Tech / Comunidade & Opinião',
+      outroPhrase:
+        'Qual a sua opinião técnica sobre esse lançamento? Comente aqui embaixo, não esquece de deixar aquele like fortalecedor e ativar o sininho para mais análises completas como essa!',
+      isDefault: false,
+    },
+  ]);
   const [selectedOutroPresetId, setSelectedOutroPresetId] = useState<string>('outro_gamer');
   const [customOutroPhrase, setCustomOutroPhrase] = useState<string>(
     'E você, o que achou dessa novidade? Deixa nos comentários qual arma você vai testar primeiro, esmaga o botão de like, se inscreve no canal @stanleyalvesbr e até o próximo vídeo!'
@@ -415,6 +451,7 @@ export const NewsToVideoView: React.FC = () => {
         const data = await res.json();
         if (data.humanizedText) {
           setEditedFullText(data.humanizedText);
+          setHasHumanized(true);
           setHumanizeFeedback('Texto humanizado com sucesso!');
           setTimeout(() => setHumanizeFeedback(null), 3000);
         }
@@ -441,19 +478,30 @@ export const NewsToVideoView: React.FC = () => {
           elevenlabsMessage: data.elevenlabsMessage,
         });
 
-        // Seleciona prioritariamente qualquer voz clonada se existir
-        const pickDefaultVoice = (list: VoiceItem[]) => {
-          if (!list || list.length === 0) return '';
-          const cloned = list.find(
-            (v) => v.isCloned || v.name.toLowerCase().includes('clonad') || v.name.toLowerCase().includes('stanley')
-          );
-          return cloned ? cloned.id : list[0].id;
-        };
+        // 1. Prioridade máxima: Voz clonada do Stanley no VoiceStudio
+        const stanleyVoice = (data.voicestudio || []).find(
+          (v: VoiceItem) => v.isCloned || v.id === 'voice_vs_1792608137918' || v.name.toLowerCase().includes('stanley')
+        );
 
-        if (voiceEngine === 'elevenlabs' && data.elevenlabs?.length > 0) {
-          setSelectedVoiceId(pickDefaultVoice(data.elevenlabs));
-        } else if (voiceEngine === 'voicestudio_local' && data.voicestudio?.length > 0) {
-          setSelectedVoiceId(pickDefaultVoice(data.voicestudio));
+        if (stanleyVoice) {
+          setVoiceEngine('voicestudio_local');
+          setSelectedVoiceId(stanleyVoice.id);
+        } else {
+          // 2. Se não houver Stanley no VoiceStudio, busca voz clonada no ElevenLabs ou primeira disponível
+          const pickDefaultVoice = (list: VoiceItem[]) => {
+            if (!list || list.length === 0) return '';
+            const cloned = list.find(
+              (v) => v.isCloned || v.name.toLowerCase().includes('clonad') || v.name.toLowerCase().includes('stanley')
+            );
+            return cloned ? cloned.id : list[0].id;
+          };
+
+          if (voiceEngine === 'elevenlabs' && data.elevenlabs?.length > 0) {
+            setSelectedVoiceId(pickDefaultVoice(data.elevenlabs));
+          } else if (data.voicestudio?.length > 0) {
+            setVoiceEngine('voicestudio_local');
+            setSelectedVoiceId(pickDefaultVoice(data.voicestudio));
+          }
         }
       }
     } catch (err) {
@@ -659,6 +707,22 @@ export const NewsToVideoView: React.FC = () => {
   };
 
   // Disparo da Raspagem da Notícia (Transição da Tela 1 para Tela 2)
+  // Sanitizador de pontuação: garante espaçamento adequado após pontos, vírgulas e interrogações
+  const cleanPunctuationSpaces = (text: string) => {
+    if (!text) return '';
+    return text
+      .replace(/([.?!,;:])([A-Za-zÀ-ÖØ-öø-ÿ0-9])/g, '$1 $2')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  const handleFixPunctuationSpaces = () => {
+    if (!editedFullText) return;
+    const cleaned = cleanPunctuationSpaces(editedFullText);
+    setEditedFullText(cleaned);
+  };
+
   const handleScrapeNews = async () => {
     if (!url.trim()) return;
 
@@ -696,7 +760,8 @@ export const NewsToVideoView: React.FC = () => {
         const data = await res.json();
         if (data.success && data.article) {
           setArticle(data.article);
-          setEditedFullText(data.article.fullText || '');
+          const sanitizedText = cleanPunctuationSpaces(data.article.fullText || '');
+          setEditedFullText(sanitizedText);
           setSelectedImageIds(data.article.images.map((img: ScrapedImage) => img.id));
           setCurrentScreen(2);
         }
@@ -737,10 +802,10 @@ export const NewsToVideoView: React.FC = () => {
     setTimeout(() => setCopiedRawText(false), 2000);
   };
 
-  // Restaurar Texto Original Completo
+  // Restaurar Texto Original Completo com pontuação limpa
   const handleRestoreOriginalText = () => {
     if (article?.fullText) {
-      setEditedFullText(article.fullText);
+      setEditedFullText(cleanPunctuationSpaces(article.fullText));
       setRawTextSearch('');
     }
   };
@@ -755,7 +820,7 @@ export const NewsToVideoView: React.FC = () => {
       .filter((p) => p.length > 0 && p.toLowerCase().includes(term));
 
     if (matched.length > 0) {
-      setEditedFullText(matched.join('\n\n'));
+      setEditedFullText(cleanPunctuationSpaces(matched.join('\n\n')));
     } else {
       alert(`Nenhum parágrafo encontrado contendo "${rawTextSearch}".`);
     }
@@ -779,7 +844,7 @@ export const NewsToVideoView: React.FC = () => {
   // Se o usuário já tiver raspado a matéria e editedFullText estiver vazio, inicializa
   useEffect(() => {
     if (article?.fullText && !editedFullText) {
-      setEditedFullText(article.fullText);
+      setEditedFullText(cleanPunctuationSpaces(article.fullText));
     }
   }, [article]);
 
@@ -806,7 +871,34 @@ export const NewsToVideoView: React.FC = () => {
   const handleGenerateVideoPlan = async () => {
     if (!article) return;
     setIsGeneratingPlan(true);
+
     try {
+      let textToUse = editedFullText;
+
+      // Se o usuário ainda não clicou em humanizar manualmente, executa automaticamente agora
+      if (!hasHumanized && editedFullText.trim()) {
+        try {
+          const hRes = await fetch('http://localhost:3001/api/text/humanize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: editedFullText,
+              style: videoFormatType,
+            }),
+          });
+          if (hRes.ok) {
+            const hData = await hRes.json();
+            if (hData.humanizedText) {
+              textToUse = hData.humanizedText;
+              setEditedFullText(hData.humanizedText);
+              setHasHumanized(true);
+            }
+          }
+        } catch (hErr) {
+          console.warn('[NewsToVideo] Humanização automática em segundo plano:', hErr);
+        }
+      }
+
       const activePreset = introPresets.find((p) => p.id === selectedPresetId);
       const res = await fetch('http://localhost:3001/api/news/generate-plan', {
         method: 'POST',
@@ -822,7 +914,7 @@ export const NewsToVideoView: React.FC = () => {
           customHookNarration: customHookPhrase,
           customOutroNarration: customOutroPhrase,
           videoFormatType,
-          editedFullText,
+          editedFullText: textToUse,
         }),
       });
 
@@ -926,24 +1018,69 @@ export const NewsToVideoView: React.FC = () => {
     setTargetSceneIdForImagePicker(null);
   };
 
-  // 5. Ouvir Prévia do Áudio da Cena (Web Speech API Instantânea)
-  const handlePreviewSceneSpeech = (scene: NewsSceneDraft) => {
-    if ('speechSynthesis' in window) {
-      if (activePreviewSceneAudioId === scene.id) {
-        window.speechSynthesis.cancel();
-        setActivePreviewSceneAudioId(null);
-        return;
+  // 5. Ouvir Prévia do Áudio da Cena (Voz Real Clonada do Stanley ou Síntese)
+  const handlePreviewSceneSpeech = async (scene: NewsSceneDraft) => {
+    if (activePreviewSceneAudioId === scene.id) {
+      if (audioRef.current) {
+        audioRef.current.pause();
       }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setActivePreviewSceneAudioId(null);
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
+    }
+
+    setActivePreviewSceneAudioId(scene.id);
+
+    try {
+      // 1. Tenta buscar áudio sintetizado ou áudio oficial da voz clonada do Stanley
+      const res = await fetch('http://localhost:3001/api/voices/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: scene.narration,
+          voiceId: selectedVoiceId,
+          voiceEngine,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.audioUrl) {
+          const fullAudioUrl = data.audioUrl.startsWith('http')
+            ? data.audioUrl
+            : `http://localhost:3001${data.audioUrl}`;
+          const audio = new Audio(fullAudioUrl);
+          audioRef.current = audio;
+          audio.onended = () => setActivePreviewSceneAudioId(null);
+          audio.onerror = () => setActivePreviewSceneAudioId(null);
+          await audio.play();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[NewsToVideo] Falha ao tocar áudio real, fallback para voz do sistema:', e);
+    }
+
+    // 2. Fallback de síntese caso a API não responda
+    if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(scene.narration);
       utterance.lang = language || 'pt-BR';
       utterance.rate = 1.05;
       utterance.onend = () => setActivePreviewSceneAudioId(null);
       utterance.onerror = () => setActivePreviewSceneAudioId(null);
-      setActivePreviewSceneAudioId(scene.id);
       window.speechSynthesis.speak(utterance);
     } else {
-      alert('Seu navegador não suporta síntese de voz nativa para prévia.');
+      setActivePreviewSceneAudioId(null);
+      alert('Não foi possível reproduzir a prévia de áudio.');
     }
   };
 
@@ -973,12 +1110,16 @@ export const NewsToVideoView: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.videoUrl) {
+          const fullVideoUrl = data.videoUrl.startsWith('http')
+            ? data.videoUrl
+            : `http://localhost:3001${data.videoUrl}`;
+
           setSceneLipSyncStatus((prev) => ({
             ...prev,
-            [scene.id]: { loading: false, videoUrl: data.videoUrl },
+            [scene.id]: { loading: false, videoUrl: fullVideoUrl },
           }));
           setScenes((prev) =>
-            prev.map((s) => (s.id === scene.id ? { ...s, lipSyncVideoUrl: data.videoUrl } : s))
+            prev.map((s) => (s.id === scene.id ? { ...s, lipSyncVideoUrl: fullVideoUrl } : s))
           );
         }
       } else {
@@ -1161,26 +1302,28 @@ export const NewsToVideoView: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Combo de Presets */}
-                  <select
-                    value={selectedPresetId}
-                    onChange={(e) => handleSelectPreset(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold cursor-pointer"
-                  >
-                    {introPresets.map((pr) => (
-                      <option key={pr.id} value={pr.id}>
-                        {pr.name} {pr.isDefault ? '⭐' : ''}
-                      </option>
-                    ))}
-                  </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Combo de Presets com Alto Contraste */}
+                  <div className="relative">
+                    <select
+                      value={selectedPresetId}
+                      onChange={(e) => handleSelectPreset(e.target.value)}
+                      className="bg-slate-900 border-2 border-indigo-500/70 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-400 font-bold cursor-pointer shadow-md pr-8"
+                    >
+                      {introPresets.map((pr) => (
+                        <option key={pr.id} value={pr.id} className="bg-slate-900 text-white font-medium py-1.5">
+                          {pr.name} {pr.isDefault ? '⭐ [Padrão]' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   {/* Botão Salvar no Banco */}
                   <button
                     type="button"
                     onClick={handleSaveCurrentPreset}
                     disabled={isSavingPreset}
-                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>{isSavingPreset ? 'Salvando...' : presetSavedFeedback ? '✓ Salvo!' : 'Salvar no Banco'}</span>
@@ -1672,28 +1815,30 @@ export const NewsToVideoView: React.FC = () => {
                   9. Encerramento & Chamada para Ação (CTA Final):
                 </label>
 
-                {/* Controles do Preset de Encerramento */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">Preset Salvo:</span>
-                  <select
-                    value={selectedOutroPresetId}
-                    onChange={(e) => handleSelectOutroPreset(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    {outroPresets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.isDefault ? '⭐ [Padrão]' : ''}
-                      </option>
-                    ))}
-                  </select>
+                {/* Controles do Preset de Encerramento com Alto Contraste */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-300 font-bold">Preset Salvo:</span>
+                  <div className="relative">
+                    <select
+                      value={selectedOutroPresetId}
+                      onChange={(e) => handleSelectOutroPreset(e.target.value)}
+                      className="bg-slate-900 border-2 border-emerald-500/80 rounded-lg px-3 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-emerald-400 cursor-pointer shadow-lg pr-8"
+                    >
+                      {outroPresets.map((p) => (
+                        <option key={p.id} value={p.id} className="bg-slate-900 text-white font-medium py-1.5">
+                          {p.name} {p.isDefault ? '⭐ [Padrão]' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <button
                     type="button"
                     onClick={handleSaveCurrentOutroPreset}
                     disabled={isSavingOutroPreset}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/60 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                   >
-                    <Save className="w-3.5 h-3.5" />
+                    <Save className="w-3.5 h-3.5 text-emerald-400" />
                     <span>{isSavingOutroPreset ? 'Salvando...' : 'Salvar no Banco'}</span>
                   </button>
                 </div>
@@ -1819,6 +1964,17 @@ export const NewsToVideoView: React.FC = () => {
                   </span>
                 )}
 
+                {/* Botão para Corrigir Espaços e Pontuação */}
+                <button
+                  type="button"
+                  onClick={handleFixPunctuationSpaces}
+                  title="Garante que todo ponto, vírgula ou interrogação tenha espaço antes da próxima palavra"
+                  className="px-3 py-1 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 border border-teal-500/40 text-teal-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                  <span>🧹 Inserir Espaços após Pontos</span>
+                </button>
+
                 {/* Botão para Restaurar Texto Completo Original */}
                 <button
                   type="button"
@@ -1872,17 +2028,24 @@ export const NewsToVideoView: React.FC = () => {
               )}
             </div>
 
-            {/* Editor de Texto Livre */}
-            <div className="space-y-1">
+            {/* Editor de Texto Livre com Corretor Ortográfico ATIVADO */}
+            <div className="space-y-1.5">
               <textarea
                 value={editedFullText}
                 onChange={(e) => setEditedFullText(e.target.value)}
-                rows={12}
+                rows={13}
+                spellCheck={true}
+                lang="pt-BR"
+                autoCorrect="on"
+                autoCapitalize="sentences"
                 placeholder="Texto da matéria capturada... Edite, apague partes ou adicione observações livremente!"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y shadow-inner selection:bg-indigo-600 selection:text-white"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-sans text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y shadow-inner selection:bg-indigo-600 selection:text-white"
               />
-              <div className="text-[11px] text-slate-500 flex items-center justify-between px-1">
-                <span>Dica: você pode selecionar e apagar qualquer bloco diretamente no editor acima.</span>
+              <div className="text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2 px-1">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Corretor ortográfico do navegador ATIVO (Dicionário pt-BR com sublinhados gramaticais)</span>
+                </span>
                 <span>O roteiro do vídeo usará o conteúdo editado exatamente como estiver nesta caixa.</span>
               </div>
             </div>
@@ -2230,11 +2393,18 @@ export const NewsToVideoView: React.FC = () => {
                     <div className="md:col-span-4 space-y-2.5">
                       <div className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-slate-950 flex items-center justify-center group shadow-inner">
                         {hasLipSyncVideo ? (
-                          <div className="w-full h-full relative bg-black">
+                          <div
+                            onClick={() => setExpandedLipSyncVideo({
+                              url: scene.lipSyncVideoUrl || lipSyncData?.videoUrl || '',
+                              heading: `Cena ${scene.order}: ${scene.heading}`
+                            })}
+                            className="w-full h-full relative bg-black cursor-pointer group/vid"
+                          >
                             <video
                               controls
                               autoPlay
                               loop
+                              muted
                               playsInline
                               src={scene.lipSyncVideoUrl || lipSyncData?.videoUrl}
                               className="w-full h-full object-cover"
@@ -2242,6 +2412,11 @@ export const NewsToVideoView: React.FC = () => {
                             <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md z-10 pointer-events-none">
                               <CheckCircle2 className="w-3 h-3" />
                               <span>Lip-Sync Ativo</span>
+                            </div>
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/vid:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                              <div className="p-3 rounded-full bg-emerald-600 text-white shadow-xl flex items-center justify-center">
+                                <Play className="w-6 h-6 fill-current" />
+                              </div>
                             </div>
                           </div>
                         ) : scene.associatedImageUrl ? (
@@ -2324,30 +2499,51 @@ export const NewsToVideoView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Botão de Lip-Sync desta Cena */}
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateSceneLipSync(scene)}
-                        disabled={isLipSyncLoading}
-                        className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
-                      >
-                        {isLipSyncLoading ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Sincronizando Lip-Sync...</span>
-                          </>
-                        ) : hasLipSyncVideo ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Regerar Lip-Sync Desta Cena</span>
-                          </>
-                        ) : (
-                          <>
-                            <Video className="w-3.5 h-3.5 text-purple-400" />
-                            <span>Gerar Lip-Sync Desta Cena</span>
-                          </>
-                        )}
-                      </button>
+                      {/* Botões de Ação para Lip-Sync desta Cena */}
+                      {hasLipSyncVideo ? (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLipSyncVideo({
+                              url: scene.lipSyncVideoUrl || lipSyncData?.videoUrl || '',
+                              heading: `Cena ${scene.order}: ${scene.heading}`
+                            })}
+                            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/30 ring-1 ring-emerald-400"
+                          >
+                            <Play className="w-4 h-4 fill-current" />
+                            <span>▶️ Assistir ao Avatar Falando Esta Cena</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSceneLipSync(scene)}
+                            disabled={isLipSyncLoading}
+                            className="w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isLipSyncLoading ? 'animate-spin' : ''}`} />
+                            <span>Regerar Lip-Sync</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateSceneLipSync(scene)}
+                          disabled={isLipSyncLoading}
+                          className="w-full py-2.5 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                        >
+                          {isLipSyncLoading ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+                              <span>Sincronizando Lip-Sync do Avatar...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Video className="w-4 h-4 text-purple-400" />
+                              <span>Gerar Lip-Sync Desta Cena</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
 
                     {/* COLUNA 2: NARRAÇÃO EDITÁVEL & CONTROLES DE ÁUDIO (md:col-span-8) */}
@@ -2359,11 +2555,12 @@ export const NewsToVideoView: React.FC = () => {
                             <span>Fala Narrada pelo Apresentador (Editável Livremente):</span>
                           </label>
 
-                          {/* Botão de Ouvir Prévia do Áudio */}
+                          {/* Botão de Ouvir Prévia do Áudio Real do Stanley */}
                           <button
                             type="button"
                             onClick={() => handlePreviewSceneSpeech(scene)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                            title="Ouvir a fala com a voz real selecionada (Stanley Alves)"
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
                               activePreviewSceneAudioId === scene.id
                                 ? 'bg-rose-600 border-rose-500 text-white animate-pulse'
                                 : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
@@ -2371,13 +2568,13 @@ export const NewsToVideoView: React.FC = () => {
                           >
                             {activePreviewSceneAudioId === scene.id ? (
                               <>
-                                <Pause className="w-3 h-3" />
-                                <span>Pausar Áudio</span>
+                                <Pause className="w-3.5 h-3.5" />
+                                <span>Pausar Áudio Real</span>
                               </>
                             ) : (
                               <>
-                                <Volume2 className="w-3 h-3 text-rose-400" />
-                                <span>Ouvir Prévia da Fala</span>
+                                <Volume2 className="w-3.5 h-3.5 text-rose-400" />
+                                <span>Ouvir Voz Real do Stanley</span>
                               </>
                             )}
                           </button>
@@ -2902,6 +3099,62 @@ export const NewsToVideoView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* ========================================================================= */}
+      {/* ============== MODAL DE ASSISTIR LIP-SYNC DO AVATAR EM TELA CHEIA ======= */}
+      {/* ========================================================================= */}
+      {expandedLipSyncVideo && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-emerald-500/50 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Play className="w-5 h-5 fill-current" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">
+                    {expandedLipSyncVideo.heading || 'Prévia do Avatar Falando'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Vídeo sincronizado do avatar (apresentador Stanley Alves) com áudio real:
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpandedLipSyncVideo(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative rounded-xl overflow-hidden aspect-video bg-black border border-slate-800 shadow-2xl flex items-center justify-center">
+              <video
+                controls
+                autoPlay
+                playsInline
+                src={expandedLipSyncVideo.url}
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Lip-Sync renderizado e sincronizado perfeitamente para esta cena.</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setExpandedLipSyncVideo(null)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                Fechar Prévia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

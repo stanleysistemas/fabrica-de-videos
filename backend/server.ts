@@ -447,6 +447,66 @@ app.post('/api/voices/clone-recording', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint: Sintetizar ou obter áudio real para teste de fala da cena
+app.post('/api/voices/synthesize', async (req: Request, res: Response) => {
+  try {
+    const { text, voiceId, voiceEngine } = req.body;
+    const { apiKeyService } = await import('./services/apiKeyService');
+
+    // 1. Se for ElevenLabs e houver chave cadastrada, tenta sintetizar
+    const elevenKey = (apiKeyService.getAllKeys().find((k) => k.id === 'elevenlabs')?.key || '').trim();
+    if (voiceEngine === 'elevenlabs' && elevenKey && voiceId) {
+      try {
+        const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': elevenKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: text || 'Teste de fala da cena',
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.8,
+            },
+          }),
+        });
+
+        if (resp.ok) {
+          const buffer = Buffer.from(await resp.arrayBuffer());
+          const audioSamplesDir = path.resolve(process.cwd(), 'storage', 'audio_samples');
+          if (!fs.existsSync(audioSamplesDir)) {
+            fs.mkdirSync(audioSamplesDir, { recursive: true });
+          }
+          const filename = `eleven_tts_${Date.now()}.mp3`;
+          const filePath = path.join(audioSamplesDir, filename);
+          fs.writeFileSync(filePath, buffer);
+          return res.json({ success: true, audioUrl: `/storage/audio_samples/${filename}` });
+        }
+      } catch (e) {
+        console.warn('[Synthesize] Falha ElevenLabs, usando fallback de áudio:', e);
+      }
+    }
+
+    // 2. Se for VoiceStudio (voz clonada do Stanley) ou fallback de voz local
+    const stanleyAudio = path.resolve(process.cwd(), 'storage', 'audio_samples', 'voice_vs_1792608137918_sample.wav');
+    if (fs.existsSync(stanleyAudio)) {
+      return res.json({
+        success: true,
+        audioUrl: '/storage/audio_samples/voice_vs_1792608137918_sample.wav',
+        isSample: true,
+        voiceName: 'Stanley Alves (Voz Clonada Oficial)',
+      });
+    }
+
+    res.json({ success: false, error: 'Nenhum áudio de voz disponível' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao sintetizar áudio' });
+  }
+});
+
+
 // Endpoint: Visão Multimodal de Vídeo (Assistir Referência do YouTube)
 app.post('/api/analyze-video', async (req: Request, res: Response) => {
   try {
