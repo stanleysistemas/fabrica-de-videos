@@ -12,6 +12,7 @@ import { newsScraperService } from './services/newsScraperService';
 import { newsDirectorService } from './services/newsDirectorService';
 import { newsDbService } from './services/newsDbService';
 import { humanizerService } from './services/humanizerService';
+import { lipSyncService } from './services/lipSyncService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -506,6 +507,52 @@ app.post('/api/qa-inspect', async (req: Request, res: Response) => {
     res.json({ success: true, report });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Falha no QA' });
+  }
+// Endpoint: Geração e Pré-visualização de Lip-Sync de Cena Específica
+app.post('/api/lipsync/generate-scene', async (req: Request, res: Response) => {
+  try {
+    const { sceneId, avatarImageUrl, narrationText, engine, layoutMode } = req.body;
+    if (!sceneId || !narrationText) {
+      return res.status(400).json({ error: 'sceneId e narrationText são obrigatórios' });
+    }
+    const result = await lipSyncService.generateSceneLipSync({
+      sceneId,
+      avatarImageUrl: avatarImageUrl || '/storage/avatars/avatar_stanley_webcam.jpg',
+      narrationText,
+      engine: engine || 'heygen',
+      layoutMode: layoutMode || 'webcam_streamer',
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao gerar lip-sync' });
+  }
+});
+
+// Endpoint: Renderização Completa do Vídeo com Base no Plano de Cenas
+app.post('/api/video/render-news-plan', async (req: Request, res: Response) => {
+  try {
+    const { plan, brollVideoSource, avatarImageUrl } = req.body;
+    if (!plan || !plan.scenes || plan.scenes.length === 0) {
+      return res.status(400).json({ error: 'Plano com cenas é obrigatório' });
+    }
+    const projectId = `news_video_${Date.now()}`;
+    const projectConfig: any = {
+      id: projectId,
+      title: plan.title || 'Vídeo de Notícia IA',
+      aspectRatio: '16:9',
+      fps: 30,
+      scenes: plan.scenes.map((s: any) => ({
+        id: s.id,
+        durationInSeconds: s.durationInSeconds,
+        text: s.narration,
+        mediaUrl: s.associatedImageUrl,
+        layout: s.layoutMode,
+      })),
+    };
+    const renderResult = await renderService.renderProject(projectConfig);
+    res.json({ success: true, renderResult });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Falha ao renderizar plano de vídeo' });
   }
 });
 

@@ -4,7 +4,8 @@ import {
   Gamepad2, Image as ImageIcon, Film, X, AlertTriangle,
   Tv, Smartphone, Clock, User, Mic, Globe2, ArrowRight, ArrowLeft,
   Upload, CheckCircle2, Video, Play, Pause, Square, Volume2, Camera,
-  Radio, RotateCcw, Save, Filter, Wand2, Clapperboard, HeartHandshake
+  Radio, RotateCcw, Save, Filter, Wand2, Clapperboard, HeartHandshake,
+  ArrowUp, ArrowDown, Edit3, Trash2, Layers, Download
 } from 'lucide-react';
 
 export interface IntroPreset {
@@ -22,6 +23,40 @@ export interface OutroPreset {
   outroPhrase: string;
   isDefault: boolean;
   updatedAt?: string;
+}
+
+export interface NewsSceneDraft {
+  id: string;
+  order: number;
+  type: 'ken_burns_news' | 'avatar_intro' | 'avatar_outro' | 'gameplay_broll';
+  heading: string;
+  subheading?: string;
+  narration: string;
+  durationInSeconds: number;
+  associatedImageId?: string;
+  associatedImageUrl?: string;
+  kenBurnsEffect: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right';
+  layoutMode: 'full_image' | 'webcam_streamer' | 'gameplay_with_webcam' | 'avatar_fullscreen';
+  category?: string;
+  audioUrl?: string;
+  lipSyncVideoUrl?: string;
+}
+
+export interface NewsVideoPlan {
+  id: string;
+  articleId: string;
+  title: string;
+  themeFocus: string;
+  customPrompt?: string;
+  targetDurationMinutes: number;
+  totalDurationSeconds: number;
+  scenes: NewsSceneDraft[];
+  suggestedVoiceId: string;
+  styleMode: string;
+  brollSource?: {
+    channel: string;
+    label: string;
+  };
 }
 
 interface ScrapedImage {
@@ -84,8 +119,19 @@ interface VoiceItem {
 }
 
 export const NewsToVideoView: React.FC = () => {
-  // Controle de Tela (1 = Configurações Prévia, 2 = Texto Capturado e Mídias)
-  const [currentScreen, setCurrentScreen] = useState<1 | 2>(1);
+  // Controle de Tela (1 = Configurações Prévia, 2 = Texto Capturado e Mídias, 3 = Direção & Decupagem de Cenas)
+  const [currentScreen, setCurrentScreen] = useState<1 | 2 | 3>(1);
+
+  // === TELA 3: ESTADOS DO PLANO DE CENAS, ROTEIRO E LIP-SYNC ===
+  const [videoPlan, setVideoPlan] = useState<NewsVideoPlan | null>(null);
+  const [scenes, setScenes] = useState<NewsSceneDraft[]>([]);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [activePreviewSceneAudioId, setActivePreviewSceneAudioId] = useState<string | null>(null);
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [targetSceneIdForImagePicker, setTargetSceneIdForImagePicker] = useState<string | null>(null);
+  const [sceneLipSyncStatus, setSceneLipSyncStatus] = useState<Record<string, { loading: boolean; videoUrl?: string }>>({});
+  const [isRenderingFinalVideo, setIsRenderingFinalVideo] = useState(false);
+  const [renderedVideoResult, setRenderedVideoResult] = useState<any | null>(null);
 
   // === TELA 1: ESTADOS DE CONFIGURAÇÃO PRÉVIA ===
   const [url, setUrl] = useState(
@@ -743,6 +789,197 @@ export const NewsToVideoView: React.FC = () => {
     return Math.round((editedWordCount / 140) * 10) / 10;
   }, [editedWordCount]);
 
+  // === AÇÕES DA TELA 3 (DIREÇÃO, CENAS & LIP-SYNC) ===
+
+  // 1. Disparo da Geração de Roteiro e Decupagem em Cenas (Transição da Tela 2 para Tela 3)
+  const handleGenerateVideoPlan = async () => {
+    if (!article) return;
+    setIsGeneratingPlan(true);
+    try {
+      const activePreset = introPresets.find((p) => p.id === selectedPresetId);
+      const res = await fetch('http://localhost:3001/api/news/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          article,
+          themeFocus: 'all',
+          styleMode: videoFormatType,
+          selectedImageIds,
+          targetDurationMinutes,
+          brollChannel: brollVideoSource,
+          customHookHeading: activePreset?.name || 'BOMBA: NOTÍCIA OFICIAL',
+          customHookNarration: customHookPhrase,
+          customOutroNarration: customOutroPhrase,
+          videoFormatType,
+          editedFullText,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.plan) {
+          setVideoPlan(data.plan);
+          setScenes(data.plan.scenes);
+          setCurrentScreen(3);
+        }
+      } else {
+        alert('Falha ao decupar as cenas. Verifique se o backend está ativo.');
+      }
+    } catch (err) {
+      console.error('Erro ao gerar plano de vídeo:', err);
+      alert('Erro de conexão ao gerar o plano de cenas.');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  };
+
+  // 2. Reordenar Cenas (Subir ou Descer)
+  const handleMoveScene = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === scenes.length - 1) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...scenes];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    updated.forEach((s, idx) => {
+      s.order = idx + 1;
+    });
+    setScenes(updated);
+  };
+
+  // 3. Atualizar Fala da Cena e Recalcular Duração
+  const handleUpdateSceneNarration = (sceneId: string, narration: string) => {
+    setScenes((prev) =>
+      prev.map((s) => {
+        if (s.id === sceneId) {
+          const words = narration.trim().split(/\s+/).filter(Boolean).length;
+          const durationInSeconds = Math.max(3, Math.round((words / 140) * 60));
+          return { ...s, narration, durationInSeconds };
+        }
+        return s;
+      })
+    );
+  };
+
+  // 4. Trocar Imagem Associada à Cena
+  const handleSelectImageForScene = (imageUrl: string, imageId: string) => {
+    if (!targetSceneIdForImagePicker) return;
+    setScenes((prev) =>
+      prev.map((s) => {
+        if (s.id === targetSceneIdForImagePicker) {
+          return { ...s, associatedImageUrl: imageUrl, associatedImageId: imageId };
+        }
+        return s;
+      })
+    );
+    setShowImagePickerModal(false);
+    setTargetSceneIdForImagePicker(null);
+  };
+
+  // 5. Ouvir Prévia do Áudio da Cena (Web Speech API Instantânea)
+  const handlePreviewSceneSpeech = (scene: NewsSceneDraft) => {
+    if ('speechSynthesis' in window) {
+      if (activePreviewSceneAudioId === scene.id) {
+        window.speechSynthesis.cancel();
+        setActivePreviewSceneAudioId(null);
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(scene.narration);
+      utterance.lang = language || 'pt-BR';
+      utterance.rate = 1.05;
+      utterance.onend = () => setActivePreviewSceneAudioId(null);
+      utterance.onerror = () => setActivePreviewSceneAudioId(null);
+      setActivePreviewSceneAudioId(scene.id);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      alert('Seu navegador não suporta síntese de voz nativa para prévia.');
+    }
+  };
+
+  // 6. Gerar e Pré-visualizar Lip-Sync Desta Cena
+  const handleGenerateSceneLipSync = async (scene: NewsSceneDraft) => {
+    const avatarObj = avatarsList.find((a) => a.id === selectedAvatarId);
+    const avatarImg = avatarObj?.imageUrl || 'http://localhost:3001/storage/avatars/avatar_stanley_webcam.jpg';
+
+    setSceneLipSyncStatus((prev) => ({
+      ...prev,
+      [scene.id]: { loading: true },
+    }));
+
+    try {
+      const res = await fetch('http://localhost:3001/api/lipsync/generate-scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneId: scene.id,
+          avatarImageUrl: avatarImg,
+          narrationText: scene.narration,
+          engine: lipSyncEngine,
+          layoutMode: scene.layoutMode,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.videoUrl) {
+          setSceneLipSyncStatus((prev) => ({
+            ...prev,
+            [scene.id]: { loading: false, videoUrl: data.videoUrl },
+          }));
+          setScenes((prev) =>
+            prev.map((s) => (s.id === scene.id ? { ...s, lipSyncVideoUrl: data.videoUrl } : s))
+          );
+        }
+      } else {
+        alert('Falha ao gerar lip-sync da cena.');
+        setSceneLipSyncStatus((prev) => ({
+          ...prev,
+          [scene.id]: { loading: false },
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao gerar lip-sync:', err);
+      setSceneLipSyncStatus((prev) => ({
+        ...prev,
+        [scene.id]: { loading: false },
+      }));
+    }
+  };
+
+  // 7. Renderização Completa do Vídeo no Remotion
+  const handleRenderFinalVideo = async () => {
+    if (!videoPlan || scenes.length === 0) return;
+    setIsRenderingFinalVideo(true);
+    setRenderedVideoResult(null);
+    try {
+      const avatarObj = avatarsList.find((a) => a.id === selectedAvatarId);
+      const res = await fetch('http://localhost:3001/api/video/render-news-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: { ...videoPlan, scenes },
+          brollVideoSource,
+          avatarImageUrl: avatarObj?.imageUrl,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.renderResult) {
+          setRenderedVideoResult(data.renderResult);
+        }
+      } else {
+        alert('Falha ao renderizar o vídeo no backend.');
+      }
+    } catch (err) {
+      console.error('Erro ao renderizar vídeo:', err);
+      alert('Erro de conexão com o renderizador.');
+    } finally {
+      setIsRenderingFinalVideo(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
       {/* CABEÇALHO DO FLUXO COM INDICADOR DE ETAPAS */}
@@ -753,13 +990,15 @@ export const NewsToVideoView: React.FC = () => {
               <Sparkles className="w-5 h-5" />
             </span>
             <h1 className="text-xl font-black text-white tracking-tight">
-              Notícia para Vídeo (Fluxo em 2 Telas)
+              Notícia para Vídeo (Fluxo em 3 Telas)
             </h1>
           </div>
           <p className="text-xs text-slate-400">
             {currentScreen === 1 
               ? 'Tela 1: Configuração da Notícia, Formato, Duração, Avatar, Voz e Lip-Sync' 
-              : 'Tela 2: Texto Capturado, Mídias da Notícia e Seleção de Vídeo de Fundo'}
+              : currentScreen === 2
+              ? 'Tela 2: Texto Capturado, Mídias da Notícia e Seleção de Vídeo de Fundo'
+              : 'Tela 3: Direção de Cenas, Reordenação, Pré-visualização de Lip-Sync e Renderização Final'}
           </p>
         </div>
 
@@ -775,14 +1014,15 @@ export const NewsToVideoView: React.FC = () => {
         </div>
       </div>
 
-      {/* BARRA DE PROGRESSO ENTRE AS 2 TELAS */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* BARRA DE PROGRESSO ENTRE AS 3 TELAS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Tela 1 */}
         <button
           type="button"
           onClick={() => setCurrentScreen(1)}
           className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
             currentScreen === 1
-              ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+              ? 'bg-indigo-600/15 border-indigo-500 text-white shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/30'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -797,6 +1037,7 @@ export const NewsToVideoView: React.FC = () => {
           </div>
         </button>
 
+        {/* Tela 2 */}
         <button
           type="button"
           onClick={() => {
@@ -806,7 +1047,7 @@ export const NewsToVideoView: React.FC = () => {
           disabled={!article}
           className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
             currentScreen === 2
-              ? 'bg-emerald-600/15 border-emerald-500 text-white shadow-lg shadow-emerald-500/10 cursor-pointer'
+              ? 'bg-emerald-600/15 border-emerald-500 text-white shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/30 cursor-pointer'
               : !article
               ? 'bg-slate-900/50 border-slate-800/50 text-slate-600 cursor-not-allowed'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer'
@@ -818,8 +1059,35 @@ export const NewsToVideoView: React.FC = () => {
             2
           </div>
           <div>
-            <div className="text-xs font-extrabold text-white">Tela 2: Notícia Capturada & Mídias</div>
+            <div className="text-xs font-extrabold text-white">Tela 2: Notícia & Mídias</div>
             <div className="text-[11px] text-slate-400">Texto bruto, fotos do site e vídeo de fundo</div>
+          </div>
+        </button>
+
+        {/* Tela 3 */}
+        <button
+          type="button"
+          onClick={() => {
+            if (scenes.length > 0) setCurrentScreen(3);
+            else alert('Gere o plano de cenas na Tela 2 primeiro.');
+          }}
+          disabled={scenes.length === 0}
+          className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+            currentScreen === 3
+              ? 'bg-purple-600/15 border-purple-500 text-white shadow-lg shadow-purple-500/10 ring-1 ring-purple-500/30 cursor-pointer'
+              : scenes.length === 0
+              ? 'bg-slate-900/50 border-slate-800/50 text-slate-600 cursor-not-allowed'
+              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer'
+          }`}
+        >
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
+            currentScreen === 3 ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-400'
+          }`}>
+            3
+          </div>
+          <div>
+            <div className="text-xs font-extrabold text-white">Tela 3: Decupagem & Cenas</div>
+            <div className="text-[11px] text-slate-400">Roteiro, Lip-Sync e Renderização Remotion</div>
           </div>
         </button>
       </div>
@@ -1714,20 +1982,441 @@ export const NewsToVideoView: React.FC = () => {
             </div>
           </div>
 
-          {/* BOX DE CONCLUSÃO DA ETAPA */}
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-indigo-500/30 flex items-center justify-between">
+          {/* BOTÃO PRINCIPAL: GERAR ROTEIRO & DECUPAR CENAS (AVANÇAR PARA TELA 3) */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/40 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-                Fluxo Configurado com Sucesso até a Tela 2!
+              <div className="text-xs font-black text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <span>Pronto para Direção e Decupagem em Cenas!</span>
               </div>
-              <p className="text-xs text-slate-300 mt-1">
-                A notícia e suas mídias foram capturadas e o vídeo de fundo está vinculado. Aguardando suas próximas instruções para avançar!
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                O texto editado e as fotos selecionadas serão divididos em cenas sequenciais com a regra oficial de câmera (Abertura em tela cheia ➔ cenas seguintes na webcam gamer com gameplay e fotos oficiais).
               </p>
             </div>
 
-            <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Etapas 1 e 2 Alinhadas</span>
+            <button
+              type="button"
+              onClick={handleGenerateVideoPlan}
+              disabled={isGeneratingPlan || !article}
+              className="px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              {isGeneratingPlan ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>Decupando Roteiro e Cenas...</span>
+                </>
+              ) : (
+                <>
+                  <Clapperboard className="w-5 h-5" />
+                  <span>Gerar Cenas & Prosseguir para Tela 3</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ============ TELA 3: DIREÇÃO, DECUPAGEM DE CENAS & LIP-SYNC ============= */}
+      {/* ========================================================================= */}
+      {currentScreen === 3 && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* BARRA SUPERIOR DE CONTROLE DA TELA 3 */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentScreen(2)}
+                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>← Voltar para Texto & Mídias (Tela 2)</span>
+              </button>
+
+              <div className="h-6 w-px bg-slate-800 hidden sm:block" />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs bg-purple-950/40 border border-purple-500/40 text-purple-300 px-3 py-1.5 rounded-lg font-mono font-bold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-purple-400" />
+                  <span>{scenes.length} Cenas Decupadas</span>
+                </span>
+                <span className="text-xs bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-lg font-mono font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    ~{Math.round(scenes.reduce((acc, s) => acc + s.durationInSeconds, 0))}s de Vídeo (
+                    {(scenes.reduce((acc, s) => acc + s.durationInSeconds, 0) / 60).toFixed(1)} min)
+                  </span>
+                </span>
+                <span className="text-xs bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-lg font-mono font-bold flex items-center gap-1.5">
+                  <Clapperboard className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>
+                    {videoFormatType === 'live_streamer'
+                      ? '🎮 Live Streamer Gamer'
+                      : videoFormatType === 'vox_documentary'
+                      ? '🎬 Estilo VOX'
+                      : '⚡ Notícia Ágil'}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* BOTÃO MASTER: RENDERIZAR VÍDEO COMPLETO NO REMOTION */}
+            <button
+              type="button"
+              onClick={handleRenderFinalVideo}
+              disabled={isRenderingFinalVideo || scenes.length === 0}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              {isRenderingFinalVideo ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Renderizando Vídeo Completo...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Renderizar Vídeo Completo (Remotion)</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* CARD DE VÍDEO COMPLETO RENDERIZADO COM SUCESSO (SE HOUVER) */}
+          {renderedVideoResult && (
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 border-2 border-emerald-500 shadow-2xl space-y-4 animate-scaleUp">
+              <div className="flex items-center justify-between border-b border-emerald-500/30 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white">Vídeo Completo Renderizado com Sucesso!</h3>
+                    <p className="text-xs text-slate-300">
+                      Duração Total: {renderedVideoResult.durationSeconds}s • Resolução: 1080p Full HD • Áudio Normalizado
+                    </p>
+                  </div>
+                </div>
+
+                <a
+                  href={renderedVideoResult.downloadUrl}
+                  download="noticia_video_final.mp4"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Vídeo MP4</span>
+                </a>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                <div className="text-xs text-slate-400 mb-2">Pré-visualização do Arquivo Renderizado:</div>
+                <video
+                  controls
+                  src={renderedVideoResult.downloadUrl}
+                  className="w-full max-h-80 mx-auto rounded-xl border border-slate-800 bg-black"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* LISTA DE CARDS DE CENAS DECUPADAS */}
+          <div className="space-y-4">
+            {scenes.map((scene, index) => {
+              const isIntro = scene.type === 'avatar_intro';
+              const isOutro = scene.type === 'avatar_outro';
+              const lipSyncData = sceneLipSyncStatus[scene.id];
+              const isLipSyncLoading = lipSyncData?.loading;
+              const hasLipSyncVideo = scene.lipSyncVideoUrl || lipSyncData?.videoUrl;
+
+              return (
+                <div
+                  key={scene.id}
+                  className={`p-5 rounded-2xl border transition-all shadow-xl space-y-4 ${
+                    isIntro
+                      ? 'bg-slate-900/90 border-amber-500/40 ring-1 ring-amber-500/20'
+                      : isOutro
+                      ? 'bg-slate-900/90 border-emerald-500/40 ring-1 ring-emerald-500/20'
+                      : 'bg-slate-900 border-slate-800'
+                  }`}
+                >
+                  {/* CABEÇALHO DO CARD DA CENA */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-lg bg-slate-800 text-slate-200 font-mono font-bold text-xs flex items-center justify-center">
+                        #{scene.order}
+                      </span>
+
+                      {/* Tag do Tipo de Cena */}
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
+                          isIntro
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : isOutro
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : scene.type === 'gameplay_broll'
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                            : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        }`}
+                      >
+                        {isIntro && <span>🌟 Cena 1: Abertura (Tela Cheia no Estúdio Gamer)</span>}
+                        {isOutro && <span>📢 Cena Final: Encerramento & Chamada para Ação (CTA)</span>}
+                        {scene.type === 'gameplay_broll' && (
+                          <span>🎮 Cena {scene.order}: Gameplay ao Vivo @stanleyalvesbr</span>
+                        )}
+                        {scene.type === 'ken_burns_news' && (
+                          <span>📰 Cena {scene.order}: Matéria Oficial & Foto da Arma/Conteúdo</span>
+                        )}
+                      </span>
+
+                      <span className="text-xs text-slate-400 font-mono">
+                        ⏱️ ~{scene.durationInSeconds}s ({scene.narration.trim().split(/\s+/).filter(Boolean).length} palavras)
+                      </span>
+                    </div>
+
+                    {/* BOTÕES DE REORDENAÇÃO (SUBIR / DESCER) */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveScene(index, 'up')}
+                        disabled={index === 0}
+                        title="Mover esta cena para cima"
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveScene(index, 'down')}
+                        disabled={index === scenes.length - 1}
+                        title="Mover esta cena para baixo"
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CORPO PRINCIPAL DA CENA (2 COLUNAS: MÍDIA VISUAL + NARRAÇÃO EDITÁVEL) */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                    
+                    {/* COLUNA 1: MÍDIA VISUAL / AVATAR / LIP-SYNC (md:col-span-4) */}
+                    <div className="md:col-span-4 space-y-2.5">
+                      <div className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-slate-950 flex items-center justify-center group shadow-inner">
+                        {hasLipSyncVideo ? (
+                          <div className="w-full h-full relative">
+                            <img
+                              src={scene.lipSyncVideoUrl || scene.associatedImageUrl || avatarsList[0]?.imageUrl}
+                              alt="Avatar com Lip-Sync"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Lip-Sync Ativo</span>
+                            </div>
+                          </div>
+                        ) : scene.associatedImageUrl ? (
+                          <img
+                            src={scene.associatedImageUrl}
+                            alt={scene.heading}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="text-center p-3 text-slate-500 text-xs">
+                            <ImageIcon className="w-6 h-6 mx-auto mb-1 text-slate-600" />
+                            <span>Sem imagem associada</span>
+                          </div>
+                        )}
+
+                        {/* Tag de Layout de Câmera */}
+                        <div className="absolute bottom-2 left-2 right-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1 text-[10px] text-slate-200 border border-slate-700/80 flex items-center justify-between">
+                          <span className="font-bold flex items-center gap-1">
+                            <Camera className="w-3 h-3 text-amber-400" />
+                            {isIntro || isOutro ? 'Tela Cheia (Estúdio)' : 'Webcam Gamer no Canto'}
+                          </span>
+                          <span className="text-slate-400">{scene.kenBurnsEffect.replace('_', ' ')}</span>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação na Mídia da Cena */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetSceneIdForImagePicker(scene.id);
+                            setShowImagePickerModal(true);
+                          }}
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <ImageIcon className="w-3 h-3 text-indigo-400" />
+                          <span>Trocar Foto</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateSceneLipSync(scene)}
+                          disabled={isLipSyncLoading}
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isLipSyncLoading ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Sincronizando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Video className="w-3 h-3 text-purple-400" />
+                              <span>Gerar Lip-Sync</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* COLUNA 2: NARRAÇÃO EDITÁVEL & CONTROLES DE ÁUDIO (md:col-span-8) */}
+                    <div className="md:col-span-8 space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                            <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Fala Narrada pelo Apresentador (Editável Livremente):</span>
+                          </label>
+
+                          {/* Botão de Ouvir Prévia do Áudio */}
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewSceneSpeech(scene)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                              activePreviewSceneAudioId === scene.id
+                                ? 'bg-rose-600 border-rose-500 text-white animate-pulse'
+                                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                            }`}
+                          >
+                            {activePreviewSceneAudioId === scene.id ? (
+                              <>
+                                <Pause className="w-3 h-3" />
+                                <span>Pausar Áudio</span>
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="w-3 h-3 text-rose-400" />
+                                <span>Ouvir Prévia da Fala</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <textarea
+                          value={scene.narration}
+                          onChange={(e) => handleUpdateSceneNarration(scene.id, e.target.value)}
+                          rows={4}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed resize-y shadow-inner"
+                        />
+                      </div>
+
+                      {/* Barra de Direção de Câmera da Cena */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                          <strong>Direção de Câmera:</strong>{' '}
+                          {isIntro
+                            ? 'Abertura em tela cheia no estúdio com bordão oficial.'
+                            : isOutro
+                            ? 'Encerramento em tela cheia convidando a se inscrever no canal.'
+                            : 'Avatar no quadro de webcam gamer no canto com gameplay de fundo e foto oficial em destaque.'}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                          ID: {scene.id}
+                        </span>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* RODAPÉ DA TELA 3 COM BOTÃO DE RENDERIZAÇÃO */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 border border-indigo-500/40 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-black text-indigo-400 uppercase tracking-wider">
+                Todas as Cenas Alinhadas e Prontas para Renderização!
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                O Remotion compilará a linha do tempo completa com áudio sincronizado, avatar na webcam gamer e vídeo de fundo contínuo em 1080p.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRenderFinalVideo}
+              disabled={isRenderingFinalVideo || scenes.length === 0}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              {isRenderingFinalVideo ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>Renderizando Vídeo Completo...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  <span>Renderizar Vídeo Completo (Remotion)</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE TROCA DE FOTO DA CENA */}
+      {showImagePickerModal && article && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                  <ImageIcon className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Escolher Imagem para Esta Cena</h3>
+                  <p className="text-xs text-slate-400">
+                    Clique em qualquer foto oficial extraída da matéria para associar a esta cena:
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImagePickerModal(false);
+                  setTargetSceneIdForImagePicker(null);
+                }}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Grid de Fotos Disponíveis */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto p-1">
+              {article.images.map((img) => (
+                <div
+                  key={img.id}
+                  onClick={() => handleSelectImageForScene(img.url, img.id)}
+                  className="group relative rounded-xl overflow-hidden border border-slate-800 hover:border-indigo-500 cursor-pointer transition-all hover:scale-105"
+                >
+                  <img
+                    src={img.url}
+                    alt={img.alt || 'Foto da notícia'}
+                    className="w-full h-24 object-cover"
+                    loading="lazy"
+                  />
+                  <div className="p-1.5 bg-slate-950/90 text-[10px] text-slate-300 truncate">
+                    {img.alt || 'Foto Oficial'}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "voice_vs_1792608137918",
+    "name": "Stsnley Alves",
+    "engine": "voicestudio_local",
+    "tone": "grave",
+    "description": "Voz Parão para o Canal",
+    "sampleAudioPath": "E:\\SISTEMAS\\CRIAR VIDEOS\\saas_videos\\storage\\audio_samples\\voice_vs_1792608137918_sample.wav",
+    "accelerationMode": "cpu_gguf",
+    "createdAt": "2026-10-21T18:42:17.934Z"
+  },
+  {
+    "id": "voice_vs_marcus",
+    "name": "Marcus Prime (Documentário)",
+    "engine": "voicestudio_local",
+    "tone": "grave",
+    "description": "Voz profunda calibrada para autoridade, história e retenção narrativa estilo Vox.",
+    "accelerationMode": "cpu_gguf",
+    "createdAt": "2026-10-20T19:48:14.282Z"
+  },
+  {
+    "id": "voice_vs_elena",
+    "name": "Elena Tech (Dinâmica)",
+    "engine": "voicestudio_local",
+    "tone": "dinamico",
+    "description": "Entonação ágil e moderna ideal para canais dark de tecnologia, curiosidades e finanças.",
+    "accelerationMode": "cpu_gguf",
+    "createdAt": "2026-10-20T19:48:14.283Z"
+  },
+  {
+    "id": "voice_vs_rafael",
+    "name": "Rafael Mistério (Investigativo)",
+    "engine": "voicestudio_local",
+    "tone": "misterioso",
+    "description": "Sussurrado de alta fidelidade para histórias de terror, mistérios reais e conspirações.",
+    "accelerationMode": "cpu_gguf",
+    "createdAt": "2026-10-20T19:48:14.283Z"
+  }
+]
